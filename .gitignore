@@ -43,3 +43,20 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# CocoaPods — vendor dependencies, never commit
+ios/Pods/
+macos/Pods/
+
+# Flutter plugins file (auto-generated)
+.flutter-plugins
+
+# iOS build environment — may contain local machine paths
+ios/Flutter/flutter_export_environment.sh
+
+# xcworkspace inside Pods (generated)
+ios/Pods/**/*.xcworkspace
+
+# Sensitive / environment-specific
+*.env
+*.env.local
