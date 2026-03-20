@@ -51,6 +51,18 @@ class _RecordScreenState extends State<RecordScreen> {
       return;
     }
 
+    // Center map on current position immediately before stream starts
+    try {
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final latLng = LatLng(current.latitude, current.longitude);
+      setState(() => _currentLocation = latLng);
+      if (_mapReady) {
+        _mapController.move(latLng, 15);
+      }
+    } catch (_) {}
+
     _startTime = DateTime.now();
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {

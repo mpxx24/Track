@@ -22,6 +22,12 @@ class HistoryService {
     await _persist(history);
   }
 
+  Future<void> deleteRecord(String id) async {
+    final history = await loadHistory();
+    history.removeWhere((r) => r.id == id);
+    await _persist(history);
+  }
+
   Future<void> updateRecord(ActivityRecord record) async {
     final history = await loadHistory();
     final index = history.indexWhere((r) => r.id == record.id);

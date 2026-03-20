@@ -34,6 +34,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _deleteRecord(ActivityRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: const Text('Delete activity?', style: TextStyle(color: Colors.white)),
+        content: const Text('This cannot be undone.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _historyService.deleteRecord(record.id);
+      await _loadHistory();
+    }
+  }
+
   Future<void> _uploadRecord(ActivityRecord record) async {
     final prefs = await SharedPreferences.getInstance();
     final baseUrl = prefs.getString('api_base_url') ?? '';
@@ -50,10 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final file = File(record.gpxFilePath);
-    final success = await _uploadService.uploadTrack(
+    final result = await _uploadService.uploadTrack(
         file, record.activityType, baseUrl, apiKey);
 
-    if (success) {
+    if (result.success) {
       final updated = record.copyWith(uploaded: true);
       await _historyService.updateRecord(updated);
       await _loadHistory();
@@ -64,7 +89,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload failed')),
+        SnackBar(
+          content: Text('Upload failed: ${result.error}'),
+          duration: const Duration(seconds: 8),
+        ),
       );
     }
   }
@@ -159,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             formattedDuration:
                                 _formatDuration(record.duration),
                             onUpload: () => _uploadRecord(record),
+                            onDelete: () => _deleteRecord(record),
                           );
                         },
                       ),
@@ -174,17 +203,21 @@ class _ActivityCard extends StatelessWidget {
   final IconData activityIcon;
   final String formattedDuration;
   final VoidCallback onUpload;
+  final VoidCallback onDelete;
 
   const _ActivityCard({
     required this.record,
     required this.activityIcon,
     required this.formattedDuration,
     required this.onUpload,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onLongPress: onDelete,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -227,6 +260,7 @@ class _ActivityCard extends StatelessWidget {
                 ),
         ],
       ),
+    ),
     );
   }
 }
