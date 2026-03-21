@@ -1,27 +1,46 @@
+import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 
+enum LocationPermissionStatus { always, whileInUse, denied, deniedForever }
+
 class LocationService {
-  static const LocationSettings _locationSettings = LocationSettings(
-    accuracy: LocationAccuracy.high,
-    distanceFilter: 5,
-  );
+  LocationSettings get _locationSettings {
+    if (Platform.isIOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        allowBackgroundLocationUpdates: true,
+        pauseLocationUpdatesAutomatically: false,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+  }
 
   Stream<Position> positionStream() {
     return Geolocator.getPositionStream(locationSettings: _locationSettings);
   }
 
-  Future<bool> requestPermission() async {
+  Future<LocationPermissionStatus> requestPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
 
-    if (permission == LocationPermission.deniedForever) {
-      return false;
+    switch (permission) {
+      case LocationPermission.always:
+        return LocationPermissionStatus.always;
+      case LocationPermission.whileInUse:
+        return LocationPermissionStatus.whileInUse;
+      case LocationPermission.deniedForever:
+        return LocationPermissionStatus.deniedForever;
+      default:
+        return LocationPermissionStatus.denied;
     }
-
-    return permission == LocationPermission.whileInUse ||
-        permission == LocationPermission.always;
   }
+
+  Future<void> openSettings() => Geolocator.openAppSettings();
 }

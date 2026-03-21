@@ -9,6 +9,7 @@ import '../models/activity_record.dart';
 import '../services/gpx_service.dart';
 import '../services/history_service.dart';
 import '../services/location_service.dart';
+import '../services/notification_service.dart';
 
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
@@ -21,6 +22,7 @@ class _RecordScreenState extends State<RecordScreen> {
   final LocationService _locationService = LocationService();
   final GpxService _gpxService = GpxService();
   final HistoryService _historyService = HistoryService();
+  final NotificationService _notificationService = NotificationService();
   final MapController _mapController = MapController();
 
   StreamSubscription<Position>? _positionSubscription;
@@ -30,7 +32,10 @@ class _RecordScreenState extends State<RecordScreen> {
   final List<LatLng> _routePoints = [];
   DateTime? _startTime;
   Duration _elapsed = Duration.zero;
+  Duration _movingDuration = Duration.zero;
   double _distanceKm = 0.0;
+  bool _isMoving = false;
+  int _timerTick = 0;
   LatLng _currentLocation = const LatLng(51.5, -0.09);
   bool _mapReady = false;
 
@@ -41,8 +46,13 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _startRecording() async {
-    final granted = await _locationService.requestPermission();
-    if (!granted) {
+    await _notificationService.initialize();
+    await _notificationService.requestPermission();
+
+    final status = await _locationService.requestPermission();
+
+    if (status == LocationPermissionStatus.deniedForever ||
+        status == LocationPermissionStatus.denied) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Location permission denied')),
@@ -51,33 +61,73 @@ class _RecordScreenState extends State<RecordScreen> {
       return;
     }
 
-    // Center map on current position immediately before stream starts
+    if (status == LocationPermissionStatus.whileInUse) {
+      if (!mounted) return;
+      final openSettings = await _showAlwaysPermissionDialog();
+      if (openSettings == true) {
+        await _locationService.openSettings();
+        // Re-check after returning from settings
+        final newStatus = await _locationService.requestPermission();
+        if (newStatus != LocationPermissionStatus.always) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Background location not granted — GPS will pause when screen locks'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    }
+
+    // Center map on current position before stream starts
     try {
       final current = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
       );
       final latLng = LatLng(current.latitude, current.longitude);
       setState(() => _currentLocation = latLng);
-      if (_mapReady) {
-        _mapController.move(latLng, 15);
-      }
+      if (_mapReady) _mapController.move(latLng, 15);
     } catch (_) {}
 
     _startTime = DateTime.now();
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
         _elapsed = DateTime.now().difference(_startTime!);
+        if (_isMoving) {
+          _movingDuration += const Duration(seconds: 1);
+        }
       });
+      _timerTick++;
+      if (_timerTick % 10 == 0) {
+        _notificationService.showRecordingNotification(
+          distance: _distanceKm.toStringAsFixed(2),
+          movingTime: _formatDuration(_movingDuration),
+          avgSpeed: _formatAvgSpeed(),
+        );
+      }
     });
 
     _positionSubscription =
         _locationService.positionStream().listen(_onPosition);
+
+    // Initial notification
+    await _notificationService.showRecordingNotification(
+      distance: '0.00',
+      movingTime: '00:00:00',
+      avgSpeed: '--.-',
+    );
   }
 
   void _onPosition(Position position) {
     final latLng = LatLng(position.latitude, position.longitude);
+    final goodAccuracy = position.accuracy <= 20.0;
+    // speed < 0 means unavailable on iOS; > 0.3 m/s ≈ 1 km/h
+    final moving = position.speed >= 0 && position.speed > 0.3;
 
-    if (_positions.isNotEmpty) {
+    if (_positions.isNotEmpty && goodAccuracy && moving) {
       final last = _positions.last;
       final meters = Geolocator.distanceBetween(
         last.latitude,
@@ -88,6 +138,7 @@ class _RecordScreenState extends State<RecordScreen> {
       _distanceKm += meters / 1000.0;
     }
 
+    _isMoving = moving;
     _positions.add(position);
     _routePoints.add(latLng);
     _currentLocation = latLng;
@@ -100,22 +151,56 @@ class _RecordScreenState extends State<RecordScreen> {
     }
   }
 
+  Future<bool?> _showAlwaysPermissionDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: const Text('Background location needed',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Set location access to "Always" so Track. keeps recording when your screen is locked.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text('Skip', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Open Settings',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _stopRecording() async {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
+    await _notificationService.cancelRecordingNotification();
 
     if (!mounted) return;
 
     final activityType = await _showActivityTypePicker();
     if (activityType == null) {
-      // User dismissed without selecting — restart timer
+      // User dismissed — restart
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() {
           _elapsed = DateTime.now().difference(_startTime!);
+          if (_isMoving) _movingDuration += const Duration(seconds: 1);
         });
       });
       _positionSubscription =
           _locationService.positionStream().listen(_onPosition);
+      await _notificationService.showRecordingNotification(
+        distance: _distanceKm.toStringAsFixed(2),
+        movingTime: _formatDuration(_movingDuration),
+        avgSpeed: _formatAvgSpeed(),
+      );
       return;
     }
 
@@ -126,11 +211,18 @@ class _RecordScreenState extends State<RecordScreen> {
         '${activityType.toLowerCase()}_${DateFormat('yyyyMMdd_HHmmss').format(start)}.gpx';
     final File gpxFile = await _gpxService.saveGpx(gpxContent, filename);
 
+    final movingSeconds = _movingDuration.inSeconds;
+    final avgSpeedKmh = movingSeconds > 0
+        ? _distanceKm / (movingSeconds / 3600.0)
+        : 0.0;
+
     final record = ActivityRecord(
       id: '${start.millisecondsSinceEpoch}',
       startedAt: start,
       distanceKm: _distanceKm,
       duration: _elapsed,
+      movingDuration: _movingDuration,
+      avgSpeedKmh: avgSpeedKmh,
       activityType: activityType,
       gpxFilePath: gpxFile.path,
       uploaded: false,
@@ -229,12 +321,10 @@ class _RecordScreenState extends State<RecordScreen> {
     return '$h:$m:$s';
   }
 
-  String _formatPace() {
-    if (_distanceKm < 0.01 || _elapsed.inSeconds < 1) return '--:--';
-    final secsPerKm = _elapsed.inSeconds / _distanceKm;
-    final mins = (secsPerKm ~/ 60).toString().padLeft(2, '0');
-    final secs = (secsPerKm % 60).round().toString().padLeft(2, '0');
-    return '$mins:$secs';
+  String _formatAvgSpeed() {
+    if (_movingDuration.inSeconds < 1 || _distanceKm < 0.01) return '--.-';
+    final kmh = _distanceKm / (_movingDuration.inSeconds / 3600.0);
+    return kmh.toStringAsFixed(1);
   }
 
   @override
@@ -310,20 +400,25 @@ class _RecordScreenState extends State<RecordScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _StatItem(
-                        label: 'TIME',
-                        value: _formatDuration(_elapsed),
+                        label: 'MOVING TIME',
+                        value: _formatDuration(_movingDuration),
                       ),
                       _StatItem(
                         label: 'DISTANCE',
                         value: '${_distanceKm.toStringAsFixed(2)} km',
                       ),
                       _StatItem(
-                        label: 'PACE',
-                        value: '${_formatPace()} /km',
+                        label: 'AVG SPEED',
+                        value: '${_formatAvgSpeed()} km/h',
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 6),
+                  Text(
+                    'total ${_formatDuration(_elapsed)}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

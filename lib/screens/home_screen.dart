@@ -19,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<ActivityRecord> _history = [];
   bool _loading = true;
+  final Set<String> _uploading = {};
 
   @override
   void initState() {
@@ -60,6 +61,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _uploadRecord(ActivityRecord record) async {
+    if (_uploading.contains(record.id)) return;
+
     final prefs = await SharedPreferences.getInstance();
     final baseUrl = prefs.getString('api_base_url') ?? '';
     final apiKey = prefs.getString('api_key') ?? '';
@@ -68,32 +71,36 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content:
-                Text('Configure API URL and key in Settings first')),
+            content: Text('Configure API URL and key in Settings first')),
       );
       return;
     }
 
-    final file = File(record.gpxFilePath);
-    final result = await _uploadService.uploadTrack(
-        file, record.activityType, baseUrl, apiKey);
+    setState(() => _uploading.add(record.id));
+    try {
+      final file = File(record.gpxFilePath);
+      final result = await _uploadService.uploadTrack(
+          file, record.activityType, baseUrl, apiKey);
 
-    if (result.success) {
-      final updated = record.copyWith(uploaded: true);
-      await _historyService.updateRecord(updated);
-      await _loadHistory();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Uploaded successfully')),
-      );
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Upload failed: ${result.error}'),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+      if (result.success) {
+        final updated = record.copyWith(uploaded: true);
+        await _historyService.updateRecord(updated);
+        await _loadHistory();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Uploaded successfully')),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: ${result.error}'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading.remove(record.id));
     }
   }
 
@@ -185,7 +192,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             record: record,
                             activityIcon: _activityIcon(record.activityType),
                             formattedDuration:
-                                _formatDuration(record.duration),
+                                _formatDuration(record.movingDuration),
+                            isUploading: _uploading.contains(record.id),
                             onUpload: () => _uploadRecord(record),
                             onDelete: () => _deleteRecord(record),
                           );
@@ -202,6 +210,7 @@ class _ActivityCard extends StatelessWidget {
   final ActivityRecord record;
   final IconData activityIcon;
   final String formattedDuration;
+  final bool isUploading;
   final VoidCallback onUpload;
   final VoidCallback onDelete;
 
@@ -209,6 +218,7 @@ class _ActivityCard extends StatelessWidget {
     required this.record,
     required this.activityIcon,
     required this.formattedDuration,
+    required this.isUploading,
     required this.onUpload,
     required this.onDelete,
   });
@@ -244,20 +254,28 @@ class _ActivityCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${record.distanceKm.toStringAsFixed(2)} km  •  $formattedDuration',
+                  '${record.distanceKm.toStringAsFixed(2)} km  •  $formattedDuration  •  ${record.avgSpeedKmh.toStringAsFixed(1)} km/h',
                   style: TextStyle(color: Colors.grey[400], fontSize: 13),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          record.uploaded
-              ? const Icon(Icons.check_circle, color: Colors.green, size: 24)
-              : IconButton(
-                  icon: const Icon(Icons.cloud_upload_outlined,
-                      color: Colors.white54),
-                  onPressed: onUpload,
-                ),
+          if (record.uploaded)
+            const Icon(Icons.check_circle, color: Colors.green, size: 24)
+          else if (isUploading)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white54),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.cloud_upload_outlined,
+                  color: Colors.white54),
+              onPressed: onUpload,
+            ),
         ],
       ),
     ),
