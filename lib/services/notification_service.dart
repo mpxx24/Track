@@ -31,6 +31,7 @@ class NotificationService {
     required String distance,
     required String movingTime,
     required String avgSpeed,
+    required bool paused,
   }) async {
     const details = NotificationDetails(
       iOS: DarwinNotificationDetails(
@@ -40,12 +41,12 @@ class NotificationService {
         interruptionLevel: InterruptionLevel.passive,
       ),
     );
-    await _plugin.show(
-      _recordingNotificationId,
-      'Track. — Recording',
-      '$distance km  •  $movingTime  •  $avgSpeed km/h',
-      details,
-    );
+    final title =
+        paused ? 'Track. — Paused' : 'Track. — Recording';
+    final body = paused
+        ? '⏸  $distance km  •  $movingTime'
+        : '$distance km  •  $movingTime  •  $avgSpeed km/h';
+    await _plugin.show(_recordingNotificationId, title, body, details);
   }
 
   Future<void> cancelRecordingNotification() async {
