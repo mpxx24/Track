@@ -6,10 +6,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 import '../models/activity_record.dart';
+import '../services/auto_pause_config.dart';
 import '../services/gpx_service.dart';
 import '../services/history_service.dart';
+import '../services/kalman_filter.dart';
 import '../services/location_service.dart';
-import '../services/notification_service.dart';
+import '../services/live_activity_service.dart';
 
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
@@ -18,23 +20,36 @@ class RecordScreen extends StatefulWidget {
   State<RecordScreen> createState() => _RecordScreenState();
 }
 
-class _RecordScreenState extends State<RecordScreen> {
+class _RecordScreenState extends State<RecordScreen>
+    with WidgetsBindingObserver {
   final LocationService _locationService = LocationService();
   final GpxService _gpxService = GpxService();
   final HistoryService _historyService = HistoryService();
-  final NotificationService _notificationService = NotificationService();
+  final LiveActivityService _liveActivityService = LiveActivityService();
   final MapController _mapController = MapController();
+  final KalmanFilter _kalmanFilter = KalmanFilter();
 
   StreamSubscription<Position>? _positionSubscription;
   Timer? _elapsedTimer;
 
+  // Raw positions kept for GPX export; route points are Kalman-filtered
   final List<Position> _positions = [];
   final List<LatLng> _routePoints = [];
+
+  String? _activityType;
+  AutoPauseConfig _autoPauseConfig = const AutoPauseConfig(enabled: false);
+
   DateTime? _startTime;
   Duration _elapsed = Duration.zero;
   Duration _movingDuration = Duration.zero;
   double _distanceKm = 0.0;
-  bool _isMoving = false;
+  double _currentSpeedKmh = 0.0;
+
+  // Auto-pause state
+  bool _isPaused = false;
+  int _pauseDebounceCount = 0;
+  int _resumeDebounceCount = 0;
+
   int _timerTick = 0;
   LatLng _currentLocation = const LatLng(51.5, -0.09);
   bool _mapReady = false;
@@ -42,13 +57,39 @@ class _RecordScreenState extends State<RecordScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startRecording();
   }
 
-  Future<void> _startRecording() async {
-    await _notificationService.initialize();
-    await _notificationService.requestPermission();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onAppResumed();
+    }
+  }
 
+  Future<void> _onAppResumed() async {
+    // Only act if recording is active (startTime set, subscription exists).
+    if (_startTime == null || _positionSubscription == null) return;
+
+    // Resubscribe to the position stream — iOS may have silently stopped
+    // delivering events while the app was suspended.
+    _positionSubscription?.cancel();
+    _positionSubscription =
+        _locationService.positionStream().listen(_onPosition);
+
+    // Fetch current position immediately so the map jumps to where the
+    // user actually is, rather than waiting for the next stream event.
+    try {
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      _onPosition(current);
+    } catch (_) {}
+  }
+
+  Future<void> _startRecording() async {
     final status = await _locationService.requestPermission();
 
     if (status == LocationPermissionStatus.deniedForever ||
@@ -66,7 +107,6 @@ class _RecordScreenState extends State<RecordScreen> {
       final openSettings = await _showAlwaysPermissionDialog();
       if (openSettings == true) {
         await _locationService.openSettings();
-        // Re-check after returning from settings
         final newStatus = await _locationService.requestPermission();
         if (newStatus != LocationPermissionStatus.always) {
           if (!mounted) return;
@@ -81,7 +121,7 @@ class _RecordScreenState extends State<RecordScreen> {
       }
     }
 
-    // Center map on current position before stream starts
+    // Centre map on current position before showing the picker
     try {
       final current = await Geolocator.getCurrentPosition(
         locationSettings:
@@ -92,63 +132,117 @@ class _RecordScreenState extends State<RecordScreen> {
       if (_mapReady) _mapController.move(latLng, 15);
     } catch (_) {}
 
+    // Ask activity type before recording begins
+    if (!mounted) return;
+    final activityType = await _showActivityTypePicker(buttonLabel: 'Start');
+    if (activityType == null) {
+      // User dismissed — go back to home
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    _activityType = activityType;
+    _autoPauseConfig = AutoPauseConfig.forActivity(activityType);
+
     _startTime = DateTime.now();
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
         _elapsed = DateTime.now().difference(_startTime!);
-        if (_isMoving) {
+        _tickAutoPause();
+        if (!_isPaused && _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
           _movingDuration += const Duration(seconds: 1);
         }
       });
       _timerTick++;
-      if (_timerTick % 10 == 0) {
-        _notificationService.showRecordingNotification(
-          distance: _distanceKm.toStringAsFixed(2),
-          movingTime: _formatDuration(_movingDuration),
-          avgSpeed: _formatAvgSpeed(),
-        );
-      }
+      if (_timerTick % 10 == 0) _updateLiveActivity();
     });
 
     _positionSubscription =
         _locationService.positionStream().listen(_onPosition);
 
-    // Initial notification
-    await _notificationService.showRecordingNotification(
-      distance: '0.00',
-      movingTime: '00:00:00',
-      avgSpeed: '--.-',
-    );
+    await _liveActivityService.start(activityType: activityType);
+  }
+
+  void _tickAutoPause() {
+    if (!_autoPauseConfig.enabled) return;
+
+    final abovePause = _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh;
+    final aboveResume = _currentSpeedKmh > _autoPauseConfig.resumeSpeedKmh;
+
+    if (!_isPaused) {
+      if (abovePause) {
+        _pauseDebounceCount = 0;
+      } else {
+        _pauseDebounceCount++;
+        if (_pauseDebounceCount >= _autoPauseConfig.pauseDebounceSeconds) {
+          _isPaused = true;
+          _pauseDebounceCount = 0;
+          _resumeDebounceCount = 0;
+        }
+      }
+    } else {
+      if (aboveResume) {
+        _resumeDebounceCount++;
+        if (_resumeDebounceCount >= _autoPauseConfig.resumeDebounceSeconds) {
+          _isPaused = false;
+          _resumeDebounceCount = 0;
+          _pauseDebounceCount = 0;
+        }
+      } else {
+        _resumeDebounceCount = 0;
+      }
+    }
   }
 
   void _onPosition(Position position) {
-    final latLng = LatLng(position.latitude, position.longitude);
-    final goodAccuracy = position.accuracy <= 20.0;
-    // speed < 0 means unavailable on iOS; > 0.3 m/s ≈ 1 km/h
-    final moving = position.speed >= 0 && position.speed > 0.3;
+    // Apply Kalman filter for smoothed display and distance
+    final (smoothLat, smoothLng) = _kalmanFilter.update(
+      position.latitude,
+      position.longitude,
+      position.accuracy,
+    );
+    final smoothLatLng = LatLng(smoothLat, smoothLng);
 
-    if (_positions.isNotEmpty && goodAccuracy && moving) {
-      final last = _positions.last;
+    _currentSpeedKmh = position.speed >= 0 ? position.speed * 3.6 : 0.0;
+    final maxAccuracy = _autoPauseConfig.maxRecordAccuracyMeters;
+    final goodAccuracy =
+        maxAccuracy == null || position.accuracy <= maxAccuracy;
+
+    // Accumulate distance from filtered coords when active and moving
+    if (_routePoints.isNotEmpty && goodAccuracy && !_isPaused &&
+        _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
+      final last = _routePoints.last;
       final meters = Geolocator.distanceBetween(
         last.latitude,
         last.longitude,
-        position.latitude,
-        position.longitude,
+        smoothLat,
+        smoothLng,
       );
       _distanceKm += meters / 1000.0;
     }
 
-    _isMoving = moving;
-    _positions.add(position);
-    _routePoints.add(latLng);
-    _currentLocation = latLng;
+    // Only record when accuracy is good (≤20 m) — drops cold-start noise
+    if (goodAccuracy) {
+      _positions.add(position);
+      _routePoints.add(smoothLatLng);
+    }
+    _currentLocation = smoothLatLng;
 
     if (mounted) {
       setState(() {});
       if (_mapReady) {
-        _mapController.move(latLng, _mapController.camera.zoom);
+        _mapController.move(smoothLatLng, _mapController.camera.zoom);
       }
     }
+  }
+
+  void _updateLiveActivity() {
+    _liveActivityService.update(
+      distance: _distanceKm.toStringAsFixed(2),
+      movingTime: _formatDuration(_movingDuration),
+      avgSpeed: _formatAvgSpeed(),
+      isPaused: _isPaused,
+    );
   }
 
   Future<bool?> _showAlwaysPermissionDialog() {
@@ -181,30 +275,34 @@ class _RecordScreenState extends State<RecordScreen> {
   Future<void> _stopRecording() async {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
-    await _notificationService.cancelRecordingNotification();
+    await _liveActivityService.stop();
 
     if (!mounted) return;
 
-    final activityType = await _showActivityTypePicker();
-    if (activityType == null) {
-      // User dismissed — restart
+    final confirmed = await _showSaveConfirmation();
+    if (confirmed != true) {
+      // Resume recording
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() {
           _elapsed = DateTime.now().difference(_startTime!);
-          if (_isMoving) _movingDuration += const Duration(seconds: 1);
+          _tickAutoPause();
+          if (!_isPaused &&
+              _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
+            _movingDuration += const Duration(seconds: 1);
+          }
         });
+        _timerTick++;
+        if (_timerTick % 10 == 0) _updateLiveActivity();
       });
       _positionSubscription =
           _locationService.positionStream().listen(_onPosition);
-      await _notificationService.showRecordingNotification(
-        distance: _distanceKm.toStringAsFixed(2),
-        movingTime: _formatDuration(_movingDuration),
-        avgSpeed: _formatAvgSpeed(),
-      );
+      await _liveActivityService.start(activityType: _activityType!);
+      _updateLiveActivity();
       return;
     }
 
     final start = _startTime ?? DateTime.now();
+    final activityType = _activityType!;
     final gpxContent =
         _gpxService.generateGpx(_positions, start, activityType);
     final filename =
@@ -212,9 +310,8 @@ class _RecordScreenState extends State<RecordScreen> {
     final File gpxFile = await _gpxService.saveGpx(gpxContent, filename);
 
     final movingSeconds = _movingDuration.inSeconds;
-    final avgSpeedKmh = movingSeconds > 0
-        ? _distanceKm / (movingSeconds / 3600.0)
-        : 0.0;
+    final avgSpeedKmh =
+        movingSeconds > 0 ? _distanceKm / (movingSeconds / 3600.0) : 0.0;
 
     final record = ActivityRecord(
       id: '${start.millisecondsSinceEpoch}',
@@ -237,7 +334,36 @@ class _RecordScreenState extends State<RecordScreen> {
     Navigator.pop(context);
   }
 
-  Future<String?> _showActivityTypePicker() async {
+  Future<bool?> _showSaveConfirmation() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: Text(
+          'Save $_activityType?',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '${_distanceKm.toStringAsFixed(2)} km  •  ${_formatDuration(_movingDuration)}',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Resume',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child:
+                const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showActivityTypePicker({required String buttonLabel}) async {
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.grey[850],
@@ -301,8 +427,9 @@ class _RecordScreenState extends State<RecordScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Save Activity',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(buttonLabel,
+                        style:
+                            const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -329,6 +456,7 @@ class _RecordScreenState extends State<RecordScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
     _mapController.dispose();
@@ -414,10 +542,21 @@ class _RecordScreenState extends State<RecordScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    'total ${_formatDuration(_elapsed)}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
+                  if (_isPaused)
+                    const Text(
+                      '⏸ PAUSED',
+                      style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2),
+                    )
+                  else
+                    Text(
+                      'total ${_formatDuration(_elapsed)}',
+                      style:
+                          TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,

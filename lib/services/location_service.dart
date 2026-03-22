@@ -10,7 +10,9 @@ class LocationService {
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
         allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
         pauseLocationUpdatesAutomatically: false,
+        activityType: ActivityType.fitness,
       );
     }
     return const LocationSettings(
