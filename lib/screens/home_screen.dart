@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity_record.dart';
 import '../services/history_service.dart';
 import '../services/upload_service.dart';
+import 'activity_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -194,6 +195,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             formattedDuration:
                                 _formatDuration(record.movingDuration),
                             isUploading: _uploading.contains(record.id),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ActivityDetailScreen(record: record),
+                              ),
+                            ),
                             onUpload: () => _uploadRecord(record),
                             onDelete: () => _deleteRecord(record),
                           );
@@ -211,6 +219,7 @@ class _ActivityCard extends StatelessWidget {
   final IconData activityIcon;
   final String formattedDuration;
   final bool isUploading;
+  final VoidCallback onTap;
   final VoidCallback onUpload;
   final VoidCallback onDelete;
 
@@ -219,6 +228,7 @@ class _ActivityCard extends StatelessWidget {
     required this.activityIcon,
     required this.formattedDuration,
     required this.isUploading,
+    required this.onTap,
     required this.onUpload,
     required this.onDelete,
   });
@@ -226,6 +236,7 @@ class _ActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTap: onTap,
       onLongPress: onDelete,
       child: Container(
       margin: const EdgeInsets.only(bottom: 12),
