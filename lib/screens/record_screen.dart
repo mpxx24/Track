@@ -149,7 +149,7 @@ class _RecordScreenState extends State<RecordScreen>
       setState(() {
         _elapsed = DateTime.now().difference(_startTime!);
         _tickAutoPause();
-        if (!_isPaused && _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
+        if (!_isPaused) {
           _movingDuration += const Duration(seconds: 1);
         }
       });
@@ -209,8 +209,7 @@ class _RecordScreenState extends State<RecordScreen>
         maxAccuracy == null || position.accuracy <= maxAccuracy;
 
     // Accumulate distance from filtered coords when active and moving
-    if (_routePoints.isNotEmpty && goodAccuracy && !_isPaused &&
-        _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
+    if (_routePoints.isNotEmpty && goodAccuracy && !_isPaused) {
       final last = _routePoints.last;
       final meters = Geolocator.distanceBetween(
         last.latitude,
@@ -491,23 +490,22 @@ class _RecordScreenState extends State<RecordScreen>
                     ),
                   ],
                 ),
-              if (_routePoints.isNotEmpty)
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: _routePoints.last,
-                      width: 16,
-                      height: 16,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _currentLocation,
+                    width: 16,
+                    height: 16,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
             ],
           ),
           Positioned(
