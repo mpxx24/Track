@@ -12,6 +12,7 @@ import '../services/history_service.dart';
 import '../services/kalman_filter.dart';
 import '../services/location_service.dart';
 import '../services/live_activity_service.dart';
+import '../services/speed_calculator.dart';
 
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
@@ -44,6 +45,10 @@ class _RecordScreenState extends State<RecordScreen>
   Duration _movingDuration = Duration.zero;
   double _distanceKm = 0.0;
   double _currentSpeedKmh = 0.0;
+
+  // Previous smooth position and timestamp for position-derived speed fallback
+  LatLng? _prevSmoothLatLng;
+  DateTime? _prevPositionTimestamp;
 
   // Auto-pause state
   bool _isPaused = false;
@@ -203,7 +208,16 @@ class _RecordScreenState extends State<RecordScreen>
     );
     final smoothLatLng = LatLng(smoothLat, smoothLng);
 
-    _currentSpeedKmh = position.speed >= 0 ? position.speed * 3.6 : 0.0;
+    _currentSpeedKmh = SpeedCalculator.computeKmh(
+      positionSpeed: position.speed,
+      currSmooth: smoothLatLng,
+      prevSmooth: _prevSmoothLatLng,
+      prevTimestamp: _prevPositionTimestamp,
+      currTimestamp: position.timestamp,
+    );
+    _prevSmoothLatLng = smoothLatLng;
+    _prevPositionTimestamp = position.timestamp;
+
     final maxAccuracy = _autoPauseConfig.maxRecordAccuracyMeters;
     final goodAccuracy =
         maxAccuracy == null || position.accuracy <= maxAccuracy;
@@ -285,8 +299,7 @@ class _RecordScreenState extends State<RecordScreen>
         setState(() {
           _elapsed = DateTime.now().difference(_startTime!);
           _tickAutoPause();
-          if (!_isPaused &&
-              _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh) {
+          if (!_isPaused) {
             _movingDuration += const Duration(seconds: 1);
           }
         });

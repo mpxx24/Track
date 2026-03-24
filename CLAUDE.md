@@ -1,77 +1,69 @@
-# CLAUDE.md — Track
+# CLAUDE.md — Track.
 
-A personal GPS activity recorder (Strava-like). Built with Flutter for cross-platform mobile (primary target: iOS). Pairs with **ActivitiesJournal** (`../ActivitiesJournal/`) — uploads GPX tracks there for web viewing and comparison with Strava data.
+A personal GPS activity recorder for iOS. Records cycling, walking, and football sessions, exports GPX, and uploads to **ActivitiesJournal** (`../ActivitiesJournal/`) for web viewing and Strava comparison.
 
-## Purpose
+No backend of its own — purely a mobile client. Data is stored locally; upload is always user-initiated.
 
-Record GPS tracks during activities (cycling, walking, football), export as GPX, and upload to ActivitiesJournal. No backend of its own — purely a mobile client.
+## Commands
 
-## Tech stack
+```bash
+flutter pub get
+flutter run                    # pick simulator or device
+flutter run -d <device-id>     # specific device
+flutter test                   # unit tests in test/
+```
 
-- **Flutter** (Dart ^3.11.3)
-- `geolocator` — GPS/location
-- `flutter_map` + `latlong2` — live map
-- `shared_preferences` — local persistence
-- `http` — multipart upload
-- `path_provider` — file access
-- `intl` — date formatting
+**Deploy to physical iPhone** (free Apple ID signing, 7-day cert expiry):
+```bash
+flutter build ios --simulator  # simulator only
+# For device: open ios/Runner.xcworkspace in Xcode → sign → run
+```
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
-| `lib/main.dart` | App entry point, theme setup |
-| `lib/screens/home_screen.dart` | Activity list, upload actions |
-| `lib/screens/record_screen.dart` | GPS recording + live map |
-| `lib/screens/settings_screen.dart` | API URL + API key config |
-| `lib/models/activity_record.dart` | Activity data model, JSON serialization |
-| `lib/services/location_service.dart` | Geolocator wrapper |
-| `lib/services/gpx_service.dart` | GPX file generation |
-| `lib/services/history_service.dart` | SharedPreferences persistence |
-| `lib/services/upload_service.dart` | Multipart HTTP upload to ActivitiesJournal |
+| `lib/main.dart` | Entry point, dark theme setup, route declarations |
+| `lib/screens/home_screen.dart` | Activity list, upload triggers |
+| `lib/screens/record_screen.dart` | GPS recording, live map, auto-pause logic |
+| `lib/screens/settings_screen.dart` | API URL + API key (stored in SharedPreferences) |
+| `lib/models/activity_record.dart` | Activity data model, JSON serialisation, `ActivityType` enum |
+| `lib/services/location_service.dart` | `geolocator` wrapper; iOS uses `AppleSettings` (background updates, fitness activity type) |
+| `lib/services/kalman_filter.dart` | GPS smoothing — weights fixes by accuracy to reduce jitter and distance inflation |
+| `lib/services/gpx_service.dart` | Generates GPX XML from recorded positions |
+| `lib/services/history_service.dart` | SharedPreferences persistence for past activities |
+| `lib/services/upload_service.dart` | Multipart POST to ActivitiesJournal `/Tracks/Upload` |
+| `lib/services/auto_pause_config.dart` | Per-activity auto-pause thresholds (speed, debounce, GPS accuracy filter) |
+| `lib/services/live_activity_service.dart` | iOS Live Activity via `MethodChannel('com.mariusz.track/liveActivity')` |
+| `lib/services/notification_service.dart` | iOS persistent recording notification (distance, time, speed) |
 
-## How it connects to ActivitiesJournal
+## Recording pipeline
 
-Upload flow:
-1. User configures **API URL** and **API key** in Settings (matches `TrackOwner:UploadApiKey` in ActivitiesJournal's Key Vault)
-2. Tap Upload → `UploadService` sends `POST {baseUrl}/Tracks/Upload`
-   - Header: `X-Api-Key: <key>`
-   - Multipart body: `gpxFile` (binary) + `activityType` (string: `Ride`, `Walk`, `Football`)
-3. ActivitiesJournal validates key, parses GPX, stores in Azure Blob Storage
-4. Returns `TrackSummary` JSON → Track marks activity as uploaded locally
+1. `LocationService` streams `Position` from `geolocator` (5 m distance filter, background updates enabled on iOS)
+2. Each fix passes through `KalmanFilter` — smoothed coords go to the map route; raw `Position` list is kept for GPX export
+3. `AutoPauseConfig.forActivity(type)` drives auto-pause: per-activity speed thresholds + debounce counters; Football disables auto-pause entirely
+4. `LiveActivityService` updates the iOS Lock Screen widget each second via MethodChannel
+5. `NotificationService` shows a persistent notification with current stats (fallback for devices without Live Activity support)
+6. On stop: `GpxService` generates the file → saved locally via `HistoryService`
 
-Local dev API URL: `http://localhost:5010` (ActivitiesJournal default port)
-Production API URL: `https://myactivitiesjournal.azurewebsites.net`
+## Upload to ActivitiesJournal
 
-## Running locally
+`POST {baseUrl}/Tracks/Upload`
+- Header: `X-Api-Key: <key>` (must match `TrackOwner:UploadApiKey` in ActivitiesJournal Key Vault)
+- Multipart body: `gpxFile` (binary) + `activityType` (`Ride` | `Walk` | `Football`)
+- Response: `TrackSummary` JSON (app only checks HTTP 200 — response body is ignored)
+- Athlete ID is **not** sent — resolved server-side from `TrackOwner:OwnerAthleteId`
 
-```bash
-cd track
-flutter pub get
-flutter run          # pick a simulator or device
-flutter run -d <id>  # specific device
-```
-
-## Building for iOS
-
-```bash
-# Simulator
-flutter build ios --simulator
-
-# Physical device / TestFlight (requires Apple Developer account)
-flutter build ios --release
-# Then open ios/Runner.xcworkspace in Xcode to sign and deploy
-```
-
-## Preferences
-
-- No backend — keep logic client-side
-- Persist data locally first; upload is always user-initiated
-- Follow global `CLAUDE.md` for general conventions (plan before executing, 2–3 options max)
+Local dev: `http://localhost:5010` | Production: `https://myactivitiesjournal.azurewebsites.net`
 
 ## Activity types
 
-Defined in `lib/models/activity_record.dart`. Must match the `ActivityType` enum in ActivitiesJournal (`Models/ActivityType.cs`): `Ride`, `Walk`, `Football`.
+`Ride`, `Walk`, `Football` — must stay in sync with `ActivityType` enum in `ActivitiesJournal/Models/ActivityType.cs`.
+
+## Tests
+
+`test/kalman_filter_test.dart` — Kalman filter smoothing logic
+`test/auto_pause_config_test.dart` — auto-pause threshold config
 
 ## Git remote
 
