@@ -51,7 +51,9 @@ class _RecordScreenState extends State<RecordScreen>
   DateTime? _prevPositionTimestamp;
 
   // Auto-pause state
-  bool _isPaused = false;
+  bool _autoPaused = false;
+  bool _manuallyPaused = false;
+  bool get _isPaused => _autoPaused || _manuallyPaused;
   int _pauseDebounceCount = 0;
   int _resumeDebounceCount = 0;
 
@@ -174,13 +176,13 @@ class _RecordScreenState extends State<RecordScreen>
     final abovePause = _currentSpeedKmh > _autoPauseConfig.pauseSpeedKmh;
     final aboveResume = _currentSpeedKmh > _autoPauseConfig.resumeSpeedKmh;
 
-    if (!_isPaused) {
+    if (!_autoPaused) {
       if (abovePause) {
         _pauseDebounceCount = 0;
       } else {
         _pauseDebounceCount++;
         if (_pauseDebounceCount >= _autoPauseConfig.pauseDebounceSeconds) {
-          _isPaused = true;
+          _autoPaused = true;
           _pauseDebounceCount = 0;
           _resumeDebounceCount = 0;
         }
@@ -189,7 +191,7 @@ class _RecordScreenState extends State<RecordScreen>
       if (aboveResume) {
         _resumeDebounceCount++;
         if (_resumeDebounceCount >= _autoPauseConfig.resumeDebounceSeconds) {
-          _isPaused = false;
+          _autoPaused = false;
           _resumeDebounceCount = 0;
           _pauseDebounceCount = 0;
         }
@@ -285,6 +287,10 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
+  void _toggleManualPause() {
+    setState(() => _manuallyPaused = !_manuallyPaused);
+  }
+
   Future<void> _stopRecording() async {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
@@ -292,8 +298,12 @@ class _RecordScreenState extends State<RecordScreen>
 
     if (!mounted) return;
 
-    final confirmed = await _showSaveConfirmation();
-    if (confirmed != true) {
+    final choice = await _showSaveConfirmation();
+    if (choice == 'discard') {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+    if (choice != 'save') {
       // Resume recording
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() {
@@ -346,8 +356,8 @@ class _RecordScreenState extends State<RecordScreen>
     Navigator.pop(context);
   }
 
-  Future<bool?> _showSaveConfirmation() {
-    return showDialog<bool>(
+  Future<String?> _showSaveConfirmation() {
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey[850],
@@ -361,12 +371,17 @@ class _RecordScreenState extends State<RecordScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, 'resume'),
             child: const Text('Resume',
                 style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: const Text('Discard',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'save'),
             child:
                 const Text('Save', style: TextStyle(color: Colors.white)),
           ),
@@ -569,24 +584,46 @@ class _RecordScreenState extends State<RecordScreen>
                           TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _stopRecording,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _startTime != null ? _toggleManualPause : null,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white38),
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            _manuallyPaused ? 'RESUME' : 'PAUSE',
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        'STOP',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _stopRecording,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'STOP',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
