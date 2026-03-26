@@ -5,17 +5,22 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity_record.dart';
+import '../models/planned_route.dart';
 import '../services/auto_pause_config.dart';
 import '../services/gpx_service.dart';
 import '../services/history_service.dart';
 import '../services/kalman_filter.dart';
 import '../services/location_service.dart';
 import '../services/live_activity_service.dart';
+import '../services/route_planner_service.dart';
 import '../services/speed_calculator.dart';
 
 class RecordScreen extends StatefulWidget {
-  const RecordScreen({super.key});
+  final PlannedRoute? plannedRoute;
+
+  const RecordScreen({super.key, this.plannedRoute});
 
   @override
   State<RecordScreen> createState() => _RecordScreenState();
@@ -61,11 +66,31 @@ class _RecordScreenState extends State<RecordScreen>
   LatLng _currentLocation = const LatLng(51.5, -0.09);
   bool _mapReady = false;
 
+  // Planned route ghost overlay
+  List<LatLng> _ghostRoutePoints = [];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startRecording();
+    if (widget.plannedRoute != null) {
+      _loadGhostRoute(widget.plannedRoute!);
+    }
+  }
+
+  Future<void> _loadGhostRoute(PlannedRoute route) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final baseUrl = prefs.getString('api_base_url') ?? '';
+      final apiKey = prefs.getString('api_key') ?? '';
+      if (baseUrl.isEmpty || apiKey.isEmpty) return;
+
+      final points = await RoutePlannerService().fetchPoints(route.id, baseUrl, apiKey);
+      if (mounted) setState(() => _ghostRoutePoints = points);
+    } catch (_) {
+      // Ghost route is decorative — silently ignore failures
+    }
   }
 
   @override
@@ -508,6 +533,16 @@ class _RecordScreenState extends State<RecordScreen>
                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.mariusz.track',
               ),
+              if (_ghostRoutePoints.length > 1)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _ghostRoutePoints,
+                      color: const Color(0xFF607D8B).withValues(alpha: 0.7),
+                      strokeWidth: 3.0,
+                    ),
+                  ],
+                ),
               if (_routePoints.length > 1)
                 PolylineLayer(
                   polylines: [
@@ -520,6 +555,30 @@ class _RecordScreenState extends State<RecordScreen>
                 ),
               MarkerLayer(
                 markers: [
+                  if (_ghostRoutePoints.isNotEmpty)
+                    Marker(
+                      point: _ghostRoutePoints.first,
+                      width: 12,
+                      height: 12,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF607D8B),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  if (_ghostRoutePoints.length > 1)
+                    Marker(
+                      point: _ghostRoutePoints.last,
+                      width: 12,
+                      height: 12,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF607D8B),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
                   Marker(
                     point: _currentLocation,
                     width: 16,

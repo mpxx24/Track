@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity_record.dart';
+import '../models/planned_route.dart';
 import '../services/history_service.dart';
 import '../services/upload_service.dart';
 import 'activity_detail_screen.dart';
+import 'planned_routes_screen.dart';
+import 'record_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ActivityRecord> _history = [];
   bool _loading = true;
   final Set<String> _uploading = {};
+  PlannedRoute? _selectedRoute;
 
   @override
   void initState() {
@@ -156,29 +160,104 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  await Navigator.pushNamed(context, '/record');
-                  _loadHistory();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => RecordScreen(plannedRoute: _selectedRoute),
+                      ),
+                    );
+                    _loadHistory();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Start',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                 ),
-                child: const Text(
-                  'Start',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                const SizedBox(height: 8),
+                if (_selectedRoute != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.map_outlined, color: Colors.white70, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedRoute!.name,
+                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedRoute = null),
+                          child: const Icon(Icons.close, color: Colors.white54, size: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final route = await Navigator.push<PlannedRoute>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PlannedRoutesScreen()),
+                    );
+                    if (route != null) {
+                      setState(() => _selectedRoute = route);
+                    }
+                  },
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: Text(
+                    _selectedRoute == null ? 'Browse planned routes' : 'Change route',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: Colors.white24, thickness: 1, height: 1)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Recent',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12, letterSpacing: 0.8),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.white24, thickness: 1, height: 1)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Expanded(
             child: _loading
                 ? const Center(
