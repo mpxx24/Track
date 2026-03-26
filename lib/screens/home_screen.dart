@@ -131,6 +131,12 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
         backgroundColor: Colors.grey[900],
+        leading: Padding(
+          padding: const EdgeInsets.all(10),
+          child: CustomPaint(
+            painter: _RouteLogoPainter(),
+          ),
+        ),
         title: const Text(
           'Track.',
           style: TextStyle(
@@ -212,6 +218,56 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _RouteLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Coords derived from generate_icons_route_t4.py (stem_wiggle=10, bar_wiggle=14)
+    // Normalised from 1024px: stem_bot(512,740), bar_left(215,305), bar_right(800,305)
+    final stemBot  = Offset(w * 0.500, h * 0.723);
+    final barLeft  = Offset(w * 0.210, h * 0.298);
+    final barRight = Offset(w * 0.781, h * 0.298);
+
+    final stroke = Paint()
+      ..color = const Color(0xFFE13737)
+      ..strokeWidth = w * 0.085
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      // Segment 1: stem bottom → bar left (curves up-left)
+      ..moveTo(stemBot.dx, stemBot.dy)
+      ..cubicTo(
+        w * 0.509, h * 0.554,
+        w * 0.495, h * 0.317,
+        barLeft.dx, barLeft.dy,
+      )
+      // Segment 2: bar left → bar right (gentle horizontal wiggle)
+      ..cubicTo(
+        w * 0.381, h * 0.284,
+        w * 0.610, h * 0.311,
+        barRight.dx, barRight.dy,
+      );
+
+    canvas.drawPath(path, stroke);
+
+    // White start dot — bottom of stem
+    canvas.drawCircle(stemBot, w * 0.075,
+        Paint()..color = Colors.white);
+
+    // End dot — white ring + red centre
+    canvas.drawCircle(barRight, w * 0.092,
+        Paint()..color = Colors.white);
+    canvas.drawCircle(barRight, w * 0.056,
+        Paint()..color = const Color(0xFFE13737));
+  }
+
+  @override
+  bool shouldRepaint(_RouteLogoPainter oldDelegate) => false;
 }
 
 class _ActivityCard extends StatelessWidget {
