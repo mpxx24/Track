@@ -271,16 +271,7 @@ class _RecordScreenState extends State<RecordScreen>
     if (mounted) {
       setState(() {});
       if (_mapReady) {
-        if (_routePoints.length > 1) {
-          _mapController.fitCamera(
-            CameraFit.bounds(
-              bounds: LatLngBounds.fromPoints(_routePoints),
-              padding: const EdgeInsets.fromLTRB(32, 32, 32, 220),
-            ),
-          );
-        } else {
-          _mapController.move(smoothLatLng, 15);
-        }
+        _mapController.move(smoothLatLng, _mapController.camera.zoom);
       }
     }
   }

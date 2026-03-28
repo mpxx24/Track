@@ -61,5 +61,36 @@ void main() {
       expect(lat, closeTo(51.5, 0.000001));
       expect(lng, closeTo(-0.1, 0.000001));
     });
+
+    test('filter remains responsive after 200 updates — does not freeze', () {
+      final filter = KalmanFilter();
+      // Warm up at a fixed position
+      for (var i = 0; i < 200; i++) {
+        filter.update(51.5, -0.1, 15.0);
+      }
+      // New position ~11 m north (0.0001 deg ≈ 11 m)
+      final (lat, _) = filter.update(51.5001, -0.1, 15.0);
+      // Estimate must shift at least 10% of the way to the new reading
+      expect(lat - 51.5, greaterThan(0.00001));
+    });
+
+    test('tracks continuous movement — accumulated distance not under-reported', () {
+      final filter = KalmanFilter();
+      // Simulate 50 GPS updates, each 5 m north (0.000045 deg ≈ 5 m)
+      const step = 0.000045;
+      var prevLat = 51.5;
+      var distanceFiltered = 0.0;
+
+      for (var i = 1; i <= 50; i++) {
+        final trueLat = 51.5 + i * step;
+        final (lat, _) = filter.update(trueLat, -0.1, 10.0);
+        distanceFiltered += (lat - prevLat).abs();
+        prevLat = lat;
+      }
+
+      final trueDistance = 50 * step;
+      // Filter should capture at least 70% of true movement
+      expect(distanceFiltered, greaterThan(trueDistance * 0.7));
+    });
   });
 }

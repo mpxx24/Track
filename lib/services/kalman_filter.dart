@@ -3,12 +3,19 @@
 /// Weights each incoming reading by its reported accuracy — high-accuracy
 /// fixes shift the estimate more; low-accuracy fixes shift it less.
 /// This reduces route jitter and prevents GPS noise from inflating distance.
+///
+/// Process noise [_Q] is added to the variance each step so the filter
+/// stays responsive over long activities. Without it, variance collapses
+/// to ~0 and the filter freezes — ignoring real movement and
+/// under-reporting distance. Q = 25 (σ = 5 m per update) matches the
+/// 5 m distance filter in LocationService.
 class KalmanFilter {
   double _lat = 0;
   double _lng = 0;
   double _variance = -1; // negative = uninitialised
 
   static const double _minAccuracy = 1.0; // clamp to avoid division issues
+  static const double _Q = 25.0; // process noise variance (m²)
 
   /// Feed a raw GPS reading. Returns the smoothed (lat, lng).
   (double lat, double lng) update(
@@ -26,7 +33,7 @@ class KalmanFilter {
       final k = _variance / (_variance + measurementVariance);
       _lat += k * (lat - _lat);
       _lng += k * (lng - _lng);
-      _variance = (1 - k) * _variance;
+      _variance = (1 - k) * _variance + _Q;
     }
 
     return (_lat, _lng);
