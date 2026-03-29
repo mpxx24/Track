@@ -16,6 +16,7 @@ import '../services/location_service.dart';
 import '../services/live_activity_service.dart';
 import '../services/route_planner_service.dart';
 import '../services/speed_calculator.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RecordScreen extends StatefulWidget {
   final PlannedRoute? plannedRoute;
@@ -65,6 +66,8 @@ class _RecordScreenState extends State<RecordScreen>
   int _timerTick = 0;
   LatLng _currentLocation = const LatLng(51.5, -0.09);
   bool _mapReady = false;
+
+  bool _keepScreenOn = false;
 
   // Planned route ghost overlay
   List<LatLng> _ghostRoutePoints = [];
@@ -316,6 +319,15 @@ class _RecordScreenState extends State<RecordScreen>
     setState(() => _manuallyPaused = !_manuallyPaused);
   }
 
+  void _toggleKeepScreenOn() {
+    setState(() => _keepScreenOn = !_keepScreenOn);
+    if (_keepScreenOn) {
+      WakelockPlus.enable();
+    } else {
+      WakelockPlus.disable();
+    }
+  }
+
   Future<void> _stopRecording() async {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
@@ -508,6 +520,7 @@ class _RecordScreenState extends State<RecordScreen>
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
@@ -609,6 +622,18 @@ class _RecordScreenState extends State<RecordScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: _toggleKeepScreenOn,
+                      child: Icon(
+                        _keepScreenOn ? Icons.brightness_high : Icons.brightness_2,
+                        color: _keepScreenOn ? Colors.white : Colors.grey[600],
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
