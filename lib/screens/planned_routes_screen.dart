@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/planned_route.dart';
 import '../services/route_planner_service.dart';
+import 'route_preview_screen.dart';
 
 class PlannedRoutesScreen extends StatefulWidget {
   const PlannedRoutesScreen({super.key});
@@ -17,6 +18,8 @@ class _PlannedRoutesScreenState extends State<PlannedRoutesScreen> {
   List<PlannedRoute> _routes = [];
   bool _loading = true;
   String? _error;
+  String _baseUrl = '';
+  String _apiKey = '';
 
   @override
   void initState() {
@@ -37,6 +40,9 @@ class _PlannedRoutesScreenState extends State<PlannedRoutesScreen> {
       return;
     }
 
+    _baseUrl = baseUrl;
+    _apiKey = apiKey;
+
     try {
       final routes = await _service.fetchRoutes(baseUrl, apiKey);
       setState(() {
@@ -48,6 +54,22 @@ class _PlannedRoutesScreenState extends State<PlannedRoutesScreen> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _openPreview(PlannedRoute route) async {
+    final result = await Navigator.push<PlannedRoute>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RoutePreviewScreen(
+          route: route,
+          baseUrl: _baseUrl,
+          apiKey: _apiKey,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      Navigator.pop(context, result);
     }
   }
 
@@ -104,6 +126,7 @@ class _PlannedRoutesScreenState extends State<PlannedRoutesScreen> {
         final route = _routes[index];
         return _RouteCard(
           route: route,
+          onPreview: () => _openPreview(route),
           onSelect: () => Navigator.pop(context, route),
         );
       },
@@ -113,62 +136,70 @@ class _PlannedRoutesScreenState extends State<PlannedRoutesScreen> {
 
 class _RouteCard extends StatelessWidget {
   final PlannedRoute route;
+  final VoidCallback onPreview;
   final VoidCallback onSelect;
 
-  const _RouteCard({required this.route, required this.onSelect});
+  const _RouteCard({
+    required this.route,
+    required this.onPreview,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.map_outlined, color: Colors.white70, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  route.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
+    return GestureDetector(
+      onTap: onPreview,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[850],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.map_outlined, color: Colors.white70, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    route.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${route.distanceKm.toStringAsFixed(2)} km  •  ${route.waypointCount} waypoints',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  DateFormat('d MMM yyyy').format(route.createdAt.toLocal()),
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: onSelect,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${route.distanceKm.toStringAsFixed(2)} km  •  ${route.waypointCount} waypoints',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    DateFormat('d MMM yyyy').format(route.createdAt.toLocal()),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
               ),
             ),
-            child: const Text('Use', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: onSelect,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Use', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }

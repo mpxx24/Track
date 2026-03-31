@@ -551,8 +551,8 @@ class _RecordScreenState extends State<RecordScreen>
                   polylines: [
                     Polyline(
                       points: _ghostRoutePoints,
-                      color: const Color(0xFF607D8B).withValues(alpha: 0.7),
-                      strokeWidth: 3.0,
+                      color: Colors.cyan.withValues(alpha: 0.85),
+                      strokeWidth: 3.5,
                     ),
                   ],
                 ),
@@ -575,7 +575,7 @@ class _RecordScreenState extends State<RecordScreen>
                       height: 12,
                       child: Container(
                         decoration: const BoxDecoration(
-                          color: Color(0xFF607D8B),
+                          color: Colors.cyan,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -587,7 +587,7 @@ class _RecordScreenState extends State<RecordScreen>
                       height: 12,
                       child: Container(
                         decoration: const BoxDecoration(
-                          color: Color(0xFF607D8B),
+                          color: Colors.cyan,
                           shape: BoxShape.circle,
                         ),
                       ),
