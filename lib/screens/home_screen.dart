@@ -71,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     final baseUrl = prefs.getString('api_base_url') ?? '';
     final apiKey = prefs.getString('api_key') ?? '';
+    final uploadToStrava = prefs.getBool('upload_to_strava') ?? false;
 
     if (baseUrl.isEmpty || apiKey.isEmpty) {
       if (!mounted) return;
@@ -85,15 +86,22 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final file = File(record.gpxFilePath);
       final result = await _uploadService.uploadTrack(
-          file, record.activityType, baseUrl, apiKey);
+          file, record.activityType, baseUrl, apiKey,
+          uploadToStrava: uploadToStrava);
 
       if (result.success) {
         final updated = record.copyWith(uploaded: true);
         await _historyService.updateRecord(updated);
         await _loadHistory();
         if (!mounted) return;
+        final stravaSuffix = switch (result.stravaStatus) {
+          null => '',
+          'uploaded' => ' · Strava ✓',
+          'duplicate' => ' · already on Strava',
+          _ => ' · Strava failed',
+        };
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Uploaded successfully')),
+          SnackBar(content: Text('Uploaded successfully$stravaSuffix')),
         );
       } else {
         if (!mounted) return;

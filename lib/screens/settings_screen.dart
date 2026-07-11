@@ -11,9 +11,11 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   static const String _keyBaseUrl = 'api_base_url';
   static const String _keyApiKey = 'api_key';
+  static const String _keyUploadToStrava = 'upload_to_strava';
 
   final TextEditingController _baseUrlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
+  bool _uploadToStrava = false;
 
   @override
   void initState() {
@@ -26,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _baseUrlController.text = prefs.getString(_keyBaseUrl) ?? '';
       _apiKeyController.text = prefs.getString(_keyApiKey) ?? '';
+      _uploadToStrava = prefs.getBool(_keyUploadToStrava) ?? false;
     });
   }
 
@@ -33,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBaseUrl, _baseUrlController.text.trim());
     await prefs.setString(_keyApiKey, _apiKeyController.text.trim());
+    await prefs.setBool(_keyUploadToStrava, _uploadToStrava);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -105,6 +109,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SwitchListTile(
+                value: _uploadToStrava,
+                onChanged: (value) => setState(() => _uploadToStrava = value),
+                title: const Text(
+                  'Also upload to Strava',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Uploads go to ActivitiesJournal, which forwards them to Strava',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+                activeThumbColor: Colors.white,
               ),
             ),
             const SizedBox(height: 40),
