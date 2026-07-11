@@ -17,6 +17,11 @@ import '../services/live_activity_service.dart';
 import '../services/route_planner_service.dart';
 import '../services/speed_calculator.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../theme.dart';
+import '../widgets/activity_type_picker.dart';
+import '../widgets/map_overlay_panel.dart';
+import '../widgets/record_controls.dart';
+import '../widgets/stat_tile.dart';
 
 class RecordScreen extends StatefulWidget {
   final PlannedRoute? plannedRoute;
@@ -28,7 +33,7 @@ class RecordScreen extends StatefulWidget {
 }
 
 class _RecordScreenState extends State<RecordScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final LocationService _locationService = LocationService();
   final GpxService _gpxService = GpxService();
   final HistoryService _historyService = HistoryService();
@@ -72,9 +77,16 @@ class _RecordScreenState extends State<RecordScreen>
   // Planned route ghost overlay
   List<LatLng> _ghostRoutePoints = [];
 
+  // Drives the pulsing REC status dot (presentation only).
+  late final AnimationController _pulseController;
+
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
     WidgetsBinding.instance.addObserver(this);
     _startRecording();
     if (widget.plannedRoute != null) {
@@ -289,26 +301,28 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Future<bool?> _showAlwaysPermissionDialog() {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text('Background location needed',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: ext.s2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ext.radiusSm),
+        ),
+        title: Text('Background location needed',
+            style: TextStyle(color: ext.txt)),
+        content: Text(
           'Set location access to "Always" so Track. keeps recording when your screen is locked.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: ext.txt2),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Skip', style: TextStyle(color: Colors.white54)),
+            child: Text('Skip', style: TextStyle(color: ext.txt3)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Open Settings',
-                style: TextStyle(color: Colors.white)),
+            child: Text('Open Settings', style: TextStyle(color: ext.record)),
           ),
         ],
       ),
@@ -394,33 +408,34 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Future<String?> _showSaveConfirmation() {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[850],
+        backgroundColor: ext.s2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ext.radiusSm),
+        ),
         title: Text(
           'Save $_activityType?',
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: ext.txt),
         ),
         content: Text(
           '${_distanceKm.toStringAsFixed(2)} km  •  ${_formatDuration(_movingDuration)}',
-          style: TextStyle(color: Colors.grey[400]),
+          style: TextStyle(color: ext.txt2),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'resume'),
-            child: const Text('Resume',
-                style: TextStyle(color: Colors.white54)),
+            child: Text('Resume', style: TextStyle(color: ext.txt2)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'discard'),
-            child: const Text('Discard',
-                style: TextStyle(color: Colors.redAccent)),
+            child: Text('Discard', style: TextStyle(color: ext.stop)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'save'),
-            child:
-                const Text('Save', style: TextStyle(color: Colors.white)),
+            child: Text('Save', style: TextStyle(color: ext.record)),
           ),
         ],
       ),
@@ -428,78 +443,83 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Future<String?> _showActivityTypePicker({required String buttonLabel}) async {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.grey[850],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      backgroundColor: ext.bg,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(ext.radius)),
       ),
       builder: (ctx) {
         String selected = 'Ride';
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Activity Type',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: ['Ride', 'Walk', 'Run', 'Football', 'Swim']
-                        .map((type) {
-                      final isSelected = selected == type;
-                      return GestureDetector(
-                        onTap: () => setModalState(() => selected = type),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.grey[700],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            type,
-                            style: TextStyle(
-                              color:
-                                  isSelected ? Colors.black : Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    TrackSpacing.lg, TrackSpacing.lg, TrackSpacing.lg, TrackSpacing.lg),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: ext.line,
+                          borderRadius: BorderRadius.circular(ext.radiusChip),
                         ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, selected),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: Text(buttonLabel,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                    const SizedBox(height: TrackSpacing.lg),
+                    Text('Start activity',
+                        style: Theme.of(ctx).textTheme.headlineMedium),
+                    const SizedBox(height: TrackSpacing.xs),
+                    Text(
+                      'SELECT A TYPE',
+                      style: TextStyle(
+                        fontFamily: kFontNum,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 11,
+                        letterSpacing: 2,
+                        color: ext.txt3,
+                      ),
+                    ),
+                    const SizedBox(height: TrackSpacing.lg),
+                    ActivityTypePicker(
+                      selectedType: selected,
+                      onSelected: (t) => setModalState(() => selected = t),
+                    ),
+                    const SizedBox(height: TrackSpacing.lg),
+                    SizedBox(
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, selected),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ext.record,
+                          foregroundColor:
+                              Theme.of(ctx).colorScheme.onPrimary,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(ext.radius),
+                          ),
+                        ),
+                        child: Text(
+                          '${buttonLabel.toUpperCase()} ${selected.toUpperCase()}',
+                          style: const TextStyle(
+                            fontFamily: kFontUi,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -527,12 +547,15 @@ class _RecordScreenState extends State<RecordScreen>
     WidgetsBinding.instance.removeObserver(this);
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
+    _pulseController.dispose();
     _mapController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return Scaffold(
       body: Stack(
         children: [
@@ -554,7 +577,7 @@ class _RecordScreenState extends State<RecordScreen>
                   polylines: [
                     Polyline(
                       points: _ghostRoutePoints,
-                      color: Colors.cyan.withValues(alpha: 0.85),
+                      color: ext.txt3.withValues(alpha: 0.85),
                       strokeWidth: 3.5,
                     ),
                   ],
@@ -564,7 +587,7 @@ class _RecordScreenState extends State<RecordScreen>
                   polylines: [
                     Polyline(
                       points: _routePoints,
-                      color: Colors.redAccent,
+                      color: ext.record,
                       strokeWidth: 4.0,
                     ),
                   ],
@@ -576,9 +599,9 @@ class _RecordScreenState extends State<RecordScreen>
                       point: _ghostRoutePoints.first,
                       width: 12,
                       height: 12,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.cyan,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: ext.txt3,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -588,22 +611,22 @@ class _RecordScreenState extends State<RecordScreen>
                       point: _ghostRoutePoints.last,
                       width: 12,
                       height: 12,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.cyan,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: ext.txt3,
                           shape: BoxShape.circle,
                         ),
                       ),
                     ),
                   Marker(
                     point: _currentLocation,
-                    width: 16,
-                    height: 16,
-                    child: Container(
+                    width: 18,
+                    height: 18,
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.blue,
+                        color: ext.record,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+                        border: Border.all(color: Colors.white, width: 3),
                       ),
                     ),
                   ),
@@ -611,106 +634,104 @@ class _RecordScreenState extends State<RecordScreen>
               ),
             ],
           ),
+          // Scrim so the status chips stay legible over bright map imagery.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x66000000), Color(0x00000000)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Top overlay chips: activity type (left) + REC/PAUSE status (right).
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: TrackSpacing.md,
+                vertical: TrackSpacing.sm,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (_activityType != null)
+                    _buildTypeChip(ext, _activityType!)
+                  else
+                    const SizedBox.shrink(),
+                  _buildStatusChip(ext),
+                ],
+              ),
+            ),
+          ),
+          // Bottom stat + control overlay panel.
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[900]!.withValues(alpha: 0.95),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+            child: MapOverlayPanel(
+              padding: EdgeInsets.fromLTRB(
+                  TrackSpacing.lg, TrackSpacing.lg, TrackSpacing.lg, TrackSpacing.lg + bottomInset),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: _toggleKeepScreenOn,
-                      child: Icon(
-                        _keepScreenOn ? Icons.brightness_high : Icons.brightness_2,
-                        color: _keepScreenOn ? Colors.white : Colors.grey[600],
-                        size: 20,
-                      ),
-                    ),
+                  // Hero distance readout.
+                  StatTile(
+                    label: 'DISTANCE · KM',
+                    value: _distanceKm.toStringAsFixed(2),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: TrackSpacing.md),
+                  Divider(height: 1, thickness: 1, color: ext.line),
+                  const SizedBox(height: TrackSpacing.md),
+                  // Secondary stat row: moving time · live speed · avg speed.
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _StatItem(
-                        label: 'MOVING TIME',
-                        value: _formatDuration(_movingDuration),
-                      ),
-                      _StatItem(
-                        label: 'DISTANCE',
-                        value: '${_distanceKm.toStringAsFixed(2)} km',
-                      ),
-                      _StatItem(
-                        label: 'AVG SPEED',
-                        value: '${_formatAvgSpeed()} km/h',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  if (_isPaused)
-                    const Text(
-                      '⏸ PAUSED',
-                      style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2),
-                    )
-                  else
-                    Text(
-                      'total ${_formatDuration(_elapsed)}',
-                      style:
-                          TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  const SizedBox(height: 16),
-                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: OutlinedButton(
-                          onPressed: _startTime != null ? _toggleManualPause : null,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white38),
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            _manuallyPaused ? 'RESUME' : 'PAUSE',
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
+                        child: StatTile(
+                          label: 'MOVING',
+                          value: _formatDuration(_movingDuration),
+                          size: StatTileSize.secondary,
                         ),
                       ),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: _stopRecording,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'STOP',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
+                        child: StatTile(
+                          label: 'NOW km/h',
+                          value: _currentSpeedKmh.toStringAsFixed(1),
+                          size: StatTileSize.secondary,
+                          valueColor: ext.record,
+                        ),
+                      ),
+                      Expanded(
+                        child: StatTile(
+                          label: 'AVG km/h',
+                          value: _formatAvgSpeed(),
+                          size: StatTileSize.secondary,
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: TrackSpacing.lg),
+                  RecordControls(
+                    isPaused: _isPaused,
+                    onPauseResume: () {
+                      if (_startTime != null) _toggleManualPause();
+                    },
+                    onStop: _stopRecording,
+                    onSecondary: _toggleKeepScreenOn,
+                    secondaryIcon: _keepScreenOn
+                        ? Icons.brightness_high
+                        : Icons.brightness_2,
                   ),
                 ],
               ),
@@ -720,30 +741,85 @@ class _RecordScreenState extends State<RecordScreen>
       ),
     );
   }
-}
 
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
+  /// Small pill floating over the map (uses [MapOverlayPanel] for legibility).
+  Widget _mapChip({
+    required TrackTheme ext,
+    required Widget dot,
+    required String label,
+    required Color labelColor,
+  }) {
+    return MapOverlayPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      borderRadius: BorderRadius.circular(ext.radiusChip),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          dot,
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: kFontNum,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              letterSpacing: 1.5,
+              color: labelColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  const _StatItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+  Widget _buildTypeChip(TrackTheme ext, String type) {
+    return _mapChip(
+      ext: ext,
+      dot: Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: ext.typeTint(type),
         ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      label: type.toUpperCase(),
+      labelColor: ext.txt,
+    );
+  }
+
+  Widget _buildStatusChip(TrackTheme ext) {
+    if (_isPaused) {
+      return _mapChip(
+        ext: ext,
+        dot: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: ext.pause),
         ),
-      ],
+        label: _autoPaused ? 'AUTO-PAUSE' : 'PAUSED',
+        labelColor: ext.pause,
+      );
+    }
+    return _mapChip(
+      ext: ext,
+      dot: ScaleTransition(
+        scale: Tween<double>(begin: 1.0, end: 0.82).animate(
+          CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+        ),
+        child: FadeTransition(
+          opacity: Tween<double>(begin: 1.0, end: 0.35).animate(
+            CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+          ),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: ext.stop),
+          ),
+        ),
+      ),
+      label: 'REC',
+      labelColor: ext.txt,
     );
   }
 }

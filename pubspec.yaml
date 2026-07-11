@@ -65,6 +65,23 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/logo.png
+
+  fonts:
+    # UI font — Archivo (variable weight axis). Bundled for offline use;
+    # do NOT swap for the google_fonts runtime-fetch package.
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-VariableFont.ttf
+    # Numeral font — Space Mono (tabular by nature).
+    - family: SpaceMono
+      fonts:
+        - asset: assets/fonts/SpaceMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceMono-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

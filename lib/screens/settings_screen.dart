@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme.dart';
+import '../widgets/settings_row.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -25,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _baseUrlController.text = prefs.getString(_keyBaseUrl) ?? '';
       _apiKeyController.text = prefs.getString(_keyApiKey) ?? '';
@@ -53,103 +57,171 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+
     return Scaffold(
-      backgroundColor: Colors.grey[900],
-      appBar: AppBar(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          'Settings',
-          style: TextStyle(color: Colors.white),
+      backgroundColor: ext.bg,
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          TrackSpacing.lg,
+          TrackSpacing.sm,
+          TrackSpacing.lg,
+          TrackSpacing.xxl,
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'API Base URL',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            TextField(
+        children: [
+          _SectionHeader('SERVER'),
+          _LabeledField(
+            label: 'Server URL',
+            child: TextField(
               controller: _baseUrlController,
-              style: const TextStyle(color: Colors.white),
+              style: _fieldStyle(ext),
               keyboardType: TextInputType.url,
               autocorrect: false,
-              decoration: InputDecoration(
-                hintText: 'https://myactivitiesjournal.azurewebsites.net',
-                hintStyle: TextStyle(color: Colors.grey[600]),
-                filled: true,
-                fillColor: Colors.grey[800],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
+              decoration: _fieldDecoration(
+                ext,
+                hint: 'https://myactivitiesjournal.azurewebsites.net',
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'API Key',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            TextField(
+          ),
+          const SizedBox(height: TrackSpacing.md),
+          _LabeledField(
+            label: 'API key',
+            child: TextField(
               controller: _apiKeyController,
-              style: const TextStyle(color: Colors.white),
+              style: _fieldStyle(ext),
               obscureText: true,
               autocorrect: false,
-              decoration: InputDecoration(
-                hintText: 'Enter your API key',
-                hintStyle: TextStyle(color: Colors.grey[600]),
-                filled: true,
-                fillColor: Colors.grey[800],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
+              decoration: _fieldDecoration(ext, hint: 'Enter your API key'),
+            ),
+          ),
+          const SizedBox(height: TrackSpacing.xl),
+          _SectionHeader('GENERAL'),
+          SettingsRow(
+            title: 'Also upload to Strava',
+            trailing: Switch(
+              value: _uploadToStrava,
+              onChanged: (value) => setState(() => _uploadToStrava = value),
+            ),
+          ),
+          const SizedBox(height: TrackSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
+              'Uploads go to ActivitiesJournal, which forwards them to Strava.',
+              style: TextStyle(
+                fontFamily: kFontUi,
+                fontSize: 12,
+                height: 1.4,
+                color: ext.txt3,
               ),
             ),
-            const SizedBox(height: 24),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                borderRadius: BorderRadius.circular(8),
+          ),
+          const SizedBox(height: TrackSpacing.xxl),
+          FilledButton(
+            onPressed: _saveSettings,
+            style: FilledButton.styleFrom(
+              backgroundColor: ext.record,
+              foregroundColor: ext.bg,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(ext.radiusSm),
               ),
-              child: SwitchListTile(
-                value: _uploadToStrava,
-                onChanged: (value) => setState(() => _uploadToStrava = value),
-                title: const Text(
-                  'Also upload to Strava',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  'Uploads go to ActivitiesJournal, which forwards them to Strava',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-                activeThumbColor: Colors.white,
+              textStyle: const TextStyle(
+                fontFamily: kFontUi,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: _saveSettings,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Save',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle _fieldStyle(TrackTheme ext) => TextStyle(
+        fontFamily: kFontNum,
+        fontSize: 13,
+        color: ext.txt,
+      );
+
+  InputDecoration _fieldDecoration(TrackTheme ext, {required String hint}) {
+    OutlineInputBorder border(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(ext.radiusSm),
+          borderSide: BorderSide(color: color, width: width),
+        );
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(
+        fontFamily: kFontNum,
+        fontSize: 13,
+        color: ext.txt3,
+      ),
+      filled: true,
+      fillColor: ext.s2,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      enabledBorder: border(ext.line),
+      border: border(ext.line),
+      focusedBorder: border(ext.record, 1.5),
+    );
+  }
+}
+
+/// Uppercase mono section header (Lume "SERVER" / "GENERAL" groups).
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, bottom: TrackSpacing.md),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: kFontNum,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+          letterSpacing: 2,
+          color: ext.txt3,
         ),
       ),
+    );
+  }
+}
+
+/// A small label above a form field, matching the Lume settings mock.
+class _LabeledField extends StatelessWidget {
+  const _LabeledField({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 7),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: kFontUi,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              color: ext.txt2,
+            ),
+          ),
+        ),
+        child,
+      ],
     );
   }
 }

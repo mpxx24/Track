@@ -69,6 +69,7 @@ The type is a plain string in the Flutter app and an enum in ActivitiesJournal �
 - [x] Track app: "Also upload to Strava" switch in **Settings** (persisted; simpler than a per-upload toggle), flag sent with every upload, snackbar shows the Strava outcome
 - [x] Tests: `StravaUploadTests`, `TracksControllerUploadTests`, extended `SportTypesTests` (server); `upload_service_test.dart` (app)
 - [ ] Later (separate task): use `external_id` during Strava sync to link/dedup synced copies of Track uploads
+- [ ] Later (before June 2027, per Strava's 2026 API terms): migrate to base URL `https://www.api-v3.strava.com` and move OAuth token-refresh credentials from form params to headers. Note: Standard-tier API access now requires a Strava subscription for the developer (3-month free code emailed to existing devs, mid-2026) — without it, both upload *and* the read sync stop working.
 
 ### Before first use (manual, one-time)
 
@@ -79,15 +80,18 @@ The type is a plain string in the Flutter app and an enum in ActivitiesJournal �
 
 ---
 
-## Phase 3 — UI rework (Claude Design)
+## Phase 3 — UI rework (Claude Design) `[~]` (code done 2026-07-11 — needs on-device verification)
 
-Prompt lives in [DESIGN_PROMPT.md](./DESIGN_PROMPT.md).
+Prompt lives in [DESIGN_PROMPT.md](./DESIGN_PROMPT.md). Chosen system: **"Lume"** (claude.ai/design project `1be2195c-943a-4d85-b2d5-1e6c19c003ec`) — dark bg `#0A0C0D`, cyan accent `#22D3EE`, Archivo UI + Space Mono numerals, per-type tints; full light variant defined but app defaults to `ThemeMode.dark`.
 
-- [ ] Run the prompt at claude.ai/design; iterate until the design system feels right
-- [ ] Translate tokens → Flutter `ThemeData` (colors, type scale, spacing, radii) in a single `lib/theme.dart`
-- [ ] Rework screens in order of visibility: Record → Home → Activity detail → Planned routes → Settings
-- [ ] Keep the recording pipeline untouched — this phase is presentation-only
+- [x] Run the prompt at claude.ai/design; iterate until the design system feels right
+- [x] Translate tokens → Flutter `ThemeData` in `lib/theme.dart` (`TrackTheme` extension: semantic colors, `typeTint()`, stat-numeral styles, radii; `TrackSpacing`; Archivo + Space Mono bundled in `assets/fonts/` — no runtime font fetch)
+- [x] Shared components in `lib/widgets/`: stat tile, record controls, activity-type picker, activity card, map overlay panel, upload status chip, settings row
+- [x] Rework screens: Record → Home → Activity detail → Planned routes (+ route preview) → Settings
+- [x] Keep the recording pipeline untouched — presentation-only (verified: kalman/auto-pause/upload tests untouched and green; 78 tests total)
 - [ ] Verify in bright-light conditions (the app is used outdoors on a bike)
+- [ ] Decide on Activity detail GPX export: currently copies GPX to clipboard (no share plugin bundled); switch to `share_plus` share sheet if preferred
+- [ ] Later: Settings toggle for light theme (tokens exist, app is pinned dark)
 
 ---
 

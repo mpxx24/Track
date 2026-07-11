@@ -3,6 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/planned_route.dart';
 import '../services/route_planner_service.dart';
+import '../theme.dart';
+import '../widgets/map_overlay_panel.dart';
+import '../widgets/stat_tile.dart';
 
 class RoutePreviewScreen extends StatefulWidget {
   final PlannedRoute route;
@@ -68,41 +71,66 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: ext.bg,
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
-        foregroundColor: Colors.white,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               widget.route.name,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             Text(
-              '${widget.route.distanceKm.toStringAsFixed(2)} km  •  ${widget.route.waypointCount} waypoints',
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              '${widget.route.distanceKm.toStringAsFixed(1)} km · ${widget.route.waypointCount} waypoints',
+              style: TextStyle(
+                fontFamily: kFontNum,
+                fontSize: 11,
+                color: ext.txt3,
+              ),
             ),
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : _error != null
-              ? Center(
-                  child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-                )
-              : Column(
-                  children: [
-                    Expanded(child: _buildMap()),
-                    _buildUseButton(),
-                  ],
-                ),
+      body: _buildBody(ext),
     );
   }
 
-  Widget _buildMap() {
+  Widget _buildBody(TrackTheme ext) {
+    if (_loading) {
+      return Center(child: CircularProgressIndicator(color: ext.record));
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(TrackSpacing.xl),
+          child: Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: kFontUi,
+              fontSize: 14,
+              color: ext.failed,
+            ),
+          ),
+        ),
+      );
+    }
+    return Stack(
+      children: [
+        Positioned.fill(child: _buildMap(ext)),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: _buildBottomPanel(ext),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMap(TrackTheme ext) {
     return FlutterMap(
       options: _buildMapOptions(),
       children: [
@@ -115,7 +143,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
             polylines: [
               Polyline(
                 points: _points,
-                color: Colors.cyan,
+                color: ext.record,
                 strokeWidth: 4.0,
               ),
             ],
@@ -123,56 +151,94 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
         if (_points.isNotEmpty)
           MarkerLayer(
             markers: [
-              Marker(
-                point: _points.first,
-                width: 16,
-                height: 16,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
+              _endpointMarker(_points.first, ext.uploaded, ext),
               if (_points.length > 1)
-                Marker(
-                  point: _points.last,
-                  width: 16,
-                  height: 16,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                  ),
-                ),
+                _endpointMarker(_points.last, ext.stop, ext),
             ],
           ),
       ],
     );
   }
 
-  Widget _buildUseButton() {
-    return Container(
-      color: Colors.grey[850],
-      padding: const EdgeInsets.all(16),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: () => Navigator.pop(context, widget.route),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+  Marker _endpointMarker(LatLng point, Color fill, TrackTheme ext) {
+    return Marker(
+      point: point,
+      width: 16,
+      height: 16,
+      child: Container(
+        decoration: BoxDecoration(
+          color: fill,
+          shape: BoxShape.circle,
+          border: Border.all(color: ext.s1, width: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomPanel(TrackTheme ext) {
+    return MapOverlayPanel(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  label: 'DISTANCE',
+                  value: widget.route.distanceKm.toStringAsFixed(1),
+                  unit: 'KM',
+                  size: StatTileSize.secondary,
+                ),
+              ),
+              Expanded(
+                child: StatTile(
+                  label: 'WAYPOINTS',
+                  value: '${widget.route.waypointCount}',
+                  size: StatTileSize.secondary,
+                ),
+              ),
+            ],
           ),
-          child: const Text(
-            'Use this Route',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          const SizedBox(height: TrackSpacing.lg),
+          _UseButton(
+            onTap: () => Navigator.pop(context, widget.route),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-width accent primary action: select this route for recording.
+class _UseButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _UseButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    final onAccent = Theme.of(context).colorScheme.onPrimary;
+    return Material(
+      color: ext.record,
+      borderRadius: BorderRadius.circular(ext.radius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ext.radius),
+        child: Container(
+          height: 56,
+          alignment: Alignment.center,
+          child: Text(
+            'USE THIS ROUTE',
+            style: TextStyle(
+              fontFamily: kFontUi,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              letterSpacing: 1.5,
+              color: onAccent,
+            ),
           ),
         ),
       ),

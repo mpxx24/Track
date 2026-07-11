@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/record_screen.dart';
 import 'screens/settings_screen.dart';
@@ -15,22 +16,9 @@ class TrackApp extends StatelessWidget {
     return MaterialApp(
       title: 'Track.',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.grey[900],
-        colorScheme: ColorScheme.dark(
-          surface: Colors.grey[900]!,
-          primary: Colors.white,
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.grey[900],
-          elevation: 0,
-        ),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: Colors.grey[800],
-          contentTextStyle: const TextStyle(color: Colors.white),
-        ),
-      ),
+      theme: trackLightTheme(),
+      darkTheme: trackDarkTheme(),
+      themeMode: ThemeMode.dark,
       initialRoute: '/',
       routes: {
         '/': (context) => const HomeScreen(),

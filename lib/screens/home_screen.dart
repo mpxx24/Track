@@ -6,6 +6,7 @@ import '../models/activity_record.dart';
 import '../models/planned_route.dart';
 import '../services/history_service.dart';
 import '../services/upload_service.dart';
+import '../theme.dart';
 import 'activity_detail_screen.dart';
 import 'planned_routes_screen.dart';
 import 'record_screen.dart';
@@ -41,20 +42,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _deleteRecord(ActivityRecord record) async {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text('Delete activity?', style: TextStyle(color: Colors.white)),
-        content: const Text('This cannot be undone.', style: TextStyle(color: Colors.white70)),
+        backgroundColor: ext.s2,
+        title: Text('Delete activity?', style: TextStyle(color: ext.txt)),
+        content: Text('This cannot be undone.', style: TextStyle(color: ext.txt2)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel', style: TextStyle(color: ext.txt3)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: Text('Delete', style: TextStyle(color: ext.failed)),
           ),
         ],
       ),
@@ -134,176 +136,260 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _formatDuration(Duration d) {
-    if (d.inHours > 0) {
-      return '${d.inHours}h ${d.inMinutes % 60}m';
+  Future<void> _openRecord() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecordScreen(plannedRoute: _selectedRoute),
+      ),
+    );
+    _loadHistory();
+  }
+
+  Future<void> _openPlannedRoutes() async {
+    final route = await Navigator.push<PlannedRoute>(
+      context,
+      MaterialPageRoute(builder: (_) => const PlannedRoutesScreen()),
+    );
+    if (route != null) {
+      setState(() => _selectedRoute = route);
     }
-    return '${d.inMinutes}m ${d.inSeconds % 60}s';
   }
 
   @override
   Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
     return Scaffold(
-      backgroundColor: Colors.grey[900],
-      appBar: AppBar(
-        backgroundColor: Colors.grey[900],
-        leading: Padding(
-          padding: const EdgeInsets.all(10),
-          child: CustomPaint(
-            painter: _RouteLogoPainter(),
-          ),
-        ),
-        title: const Text(
-          'Track.',
-          style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () async {
-              await Navigator.pushNamed(context, '/settings');
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ElevatedButton(
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => RecordScreen(plannedRoute: _selectedRoute),
-                      ),
-                    );
-                    _loadHistory();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+      backgroundColor: ext.bg,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header: brand + settings.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  TrackSpacing.lg, TrackSpacing.sm, TrackSpacing.lg, 0),
+              child: Row(
+                children: [
+                  Text('Track.', style: Theme.of(context).textTheme.headlineMedium),
+                  const Spacer(),
+                  _IconSquareButton(
+                    icon: Icons.settings_outlined,
+                    onTap: () => Navigator.pushNamed(context, '/settings'),
                   ),
-                  child: const Text(
-                    'Start',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                ],
+              ),
+            ),
+            // Prominent start-recording entry point.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  TrackSpacing.lg, TrackSpacing.lg, TrackSpacing.lg, 0),
+              child: _RecordButton(onTap: _openRecord),
+            ),
+            // Selected planned route pill (kept from prior behaviour).
+            if (_selectedRoute != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    TrackSpacing.lg, TrackSpacing.sm, TrackSpacing.lg, 0),
+                child: _SelectedRouteChip(
+                  name: _selectedRoute!.name,
+                  onClear: () => setState(() => _selectedRoute = null),
                 ),
-                const SizedBox(height: 8),
-                if (_selectedRoute != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(8),
+              ),
+            // Section header: RECENT + Routes link.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  TrackSpacing.lg, TrackSpacing.xl, TrackSpacing.lg, TrackSpacing.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    'RECENT',
+                    style: TextStyle(
+                      fontFamily: kFontNum,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 2,
+                      color: ext.txt3,
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.map_outlined, color: Colors.white70, size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
+                  ),
+                  const Spacer(),
+                  InkWell(
+                    onTap: _openPlannedRoutes,
+                    borderRadius: BorderRadius.circular(ext.radiusChip),
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Text(
+                        _selectedRoute == null ? 'Routes ›' : 'Change route ›',
+                        style: TextStyle(
+                          fontFamily: kFontUi,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                          color: ext.txt2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? Center(child: CircularProgressIndicator(color: ext.record))
+                  : _history.isEmpty
+                      ? Center(
                           child: Text(
-                            _selectedRoute!.name,
-                            style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
+                            'No activities yet',
+                            style: TextStyle(
+                                fontFamily: kFontUi, color: ext.txt3),
                           ),
-                        ),
-                        GestureDetector(
-                          onTap: () => setState(() => _selectedRoute = null),
-                          child: const Icon(Icons.close, color: Colors.white54, size: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final route = await Navigator.push<PlannedRoute>(
-                      context,
-                      MaterialPageRoute(builder: (_) => const PlannedRoutesScreen()),
-                    );
-                    if (route != null) {
-                      setState(() => _selectedRoute = route);
-                    }
-                  },
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: Text(
-                    _selectedRoute == null ? 'Browse planned routes' : 'Change route',
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Colors.white24),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: Colors.white24, thickness: 1, height: 1)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'Recent',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12, letterSpacing: 0.8),
-                  ),
-                ),
-                Expanded(child: Divider(color: Colors.white24, thickness: 1, height: 1)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white))
-                : _history.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No activities yet',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _history.length,
-                        itemBuilder: (context, index) {
-                          final record = _history[index];
-                          return _ActivityCard(
-                            record: record,
-                            activityIcon: _activityIcon(record.activityType),
-                            formattedDuration:
-                                _formatDuration(record.movingDuration),
-                            isUploading: _uploading.contains(record.id),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ActivityDetailScreen(record: record),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(
+                              TrackSpacing.md, 0, TrackSpacing.md, TrackSpacing.lg),
+                          itemCount: _history.length,
+                          separatorBuilder: (_, i) =>
+                              const SizedBox(height: TrackSpacing.sm),
+                          itemBuilder: (context, index) {
+                            final record = _history[index];
+                            return _HomeActivityCard(
+                              record: record,
+                              icon: _activityIcon(record.activityType),
+                              isUploading: _uploading.contains(record.id),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ActivityDetailScreen(record: record),
+                                ),
                               ),
-                            ),
-                            onUpload: () => _uploadRecord(record),
-                            onDelete: () => _deleteRecord(record),
-                          );
-                        },
-                      ),
+                              onUpload: () => _uploadRecord(record),
+                              onDelete: () => _deleteRecord(record),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small rounded-square icon button matching the Lume header affordance
+/// (s2 surface, hairline border, muted icon).
+class _IconSquareButton extends StatelessWidget {
+  const _IconSquareButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    return Material(
+      color: ext.s2,
+      borderRadius: BorderRadius.circular(ext.radiusSm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ext.radiusSm),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(ext.radiusSm),
+            border: Border.all(color: ext.line),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 18, color: ext.txt2),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-width accent "RECORD" call-to-action with a leading dot.
+class _RecordButton extends StatelessWidget {
+  const _RecordButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    return Material(
+      color: ext.record,
+      borderRadius: BorderRadius.circular(ext.radius),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ext.radius),
+        child: SizedBox(
+          height: 66,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 13,
+                height: 13,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: ext.bg,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'RECORD',
+                style: TextStyle(
+                  fontFamily: kFontUi,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  letterSpacing: 1.5,
+                  color: ext.bg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Themed pill showing the currently selected planned route with a clear
+/// affordance (preserves the pre-restyle route-selection behaviour).
+class _SelectedRouteChip extends StatelessWidget {
+  const _SelectedRouteChip({required this.name, required this.onClear});
+
+  final String name;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: ext.s2,
+        borderRadius: BorderRadius.circular(ext.radiusChip),
+        border: Border.all(color: ext.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.map_outlined, color: ext.txt2, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                  fontFamily: kFontUi, color: ext.txt2, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: Icon(Icons.close, color: ext.txt3, size: 16),
           ),
         ],
       ),
@@ -311,132 +397,154 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _RouteLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // Coords derived from generate_icons_route_t4.py (stem_wiggle=10, bar_wiggle=14)
-    // Normalised from 1024px: stem_bot(512,740), bar_left(215,305), bar_right(800,305)
-    final stemBot  = Offset(w * 0.500, h * 0.723);
-    final barLeft  = Offset(w * 0.210, h * 0.298);
-    final barRight = Offset(w * 0.781, h * 0.298);
-
-    final stroke = Paint()
-      ..color = const Color(0xFFE13737)
-      ..strokeWidth = w * 0.085
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path()
-      // Segment 1: stem bottom → bar left (curves up-left)
-      ..moveTo(stemBot.dx, stemBot.dy)
-      ..cubicTo(
-        w * 0.509, h * 0.554,
-        w * 0.495, h * 0.317,
-        barLeft.dx, barLeft.dy,
-      )
-      // Segment 2: bar left → bar right (gentle horizontal wiggle)
-      ..cubicTo(
-        w * 0.381, h * 0.284,
-        w * 0.610, h * 0.311,
-        barRight.dx, barRight.dy,
-      );
-
-    canvas.drawPath(path, stroke);
-
-    // White start dot — bottom of stem
-    canvas.drawCircle(stemBot, w * 0.075,
-        Paint()..color = Colors.white);
-
-    // End dot — white ring + red centre
-    canvas.drawCircle(barRight, w * 0.092,
-        Paint()..color = Colors.white);
-    canvas.drawCircle(barRight, w * 0.056,
-        Paint()..color = const Color(0xFFE13737));
-  }
-
-  @override
-  bool shouldRepaint(_RouteLogoPainter oldDelegate) => false;
-}
-
-class _ActivityCard extends StatelessWidget {
-  final ActivityRecord record;
-  final IconData activityIcon;
-  final String formattedDuration;
-  final bool isUploading;
-  final VoidCallback onTap;
-  final VoidCallback onUpload;
-  final VoidCallback onDelete;
-
-  const _ActivityCard({
+/// Recent-activity card. Mirrors the shared [ActivityCard] visual language
+/// (tinted icon box, name/date, right-aligned distance + `duration · avg`
+/// sub-line, status dot) but adds the Home-only affordances the shared widget
+/// lacks: an inline upload trigger, an uploading spinner, and long-press delete.
+class _HomeActivityCard extends StatelessWidget {
+  const _HomeActivityCard({
     required this.record,
-    required this.activityIcon,
-    required this.formattedDuration,
+    required this.icon,
     required this.isUploading,
     required this.onTap,
     required this.onUpload,
     required this.onDelete,
   });
 
+  final ActivityRecord record;
+  final IconData icon;
+  final bool isUploading;
+  final VoidCallback onTap;
+  final VoidCallback onUpload;
+  final VoidCallback onDelete;
+
+  String _compactDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    return '$h:${m.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onDelete,
-      child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(activityIcon, color: Colors.white, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  record.activityType,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  DateFormat('MMM d, yyyy  HH:mm').format(record.startedAt),
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${record.distanceKm.toStringAsFixed(2)} km  •  $formattedDuration  •  ${record.avgSpeedKmh.toStringAsFixed(1)} km/h',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                ),
-              ],
-            ),
+    final ext = Theme.of(context).extension<TrackTheme>()!;
+    final tint = ext.typeTint(record.activityType);
+    final mono = TextStyle(fontFamily: kFontNum, color: ext.txt3);
+    final avgLabel =
+        record.avgSpeedKmh > 0 ? record.avgSpeedKmh.toStringAsFixed(1) : '—';
+
+    return Material(
+      color: ext.s1,
+      borderRadius: BorderRadius.circular(ext.radius),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onDelete,
+        borderRadius: BorderRadius.circular(ext.radius),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(ext.radius),
+            border: Border.all(color: ext.line),
           ),
-          const SizedBox(width: 8),
-          if (record.uploaded)
-            const Icon(Icons.check_circle, color: Colors.green, size: 24)
-          else if (isUploading)
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white54),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.cloud_upload_outlined,
-                  color: Colors.white54),
-              onPressed: onUpload,
-            ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: ext.s2,
+                  borderRadius: BorderRadius.circular(ext.radiusSm),
+                  border: Border.all(color: tint),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 20, color: tint),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      record.activityType,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: kFontUi,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: ext.txt,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('MMM d · HH:mm').format(record.startedAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mono.copyWith(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    record.distanceKm.toStringAsFixed(1),
+                    style: ext.statNumeralSecondary.copyWith(
+                      fontSize: 17,
+                      color: ext.txt,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_compactDuration(record.movingDuration)} · $avgLabel',
+                    style: mono.copyWith(fontSize: 10),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              _trailing(ext),
+            ],
+          ),
+        ),
       ),
-    ),
+    );
+  }
+
+  /// Upload status / trigger. Uploaded -> filled badge dot; uploading ->
+  /// spinner; local -> tappable upload icon (the preserved upload trigger).
+  Widget _trailing(TrackTheme ext) {
+    if (record.uploaded) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: ext.uploaded,
+          ),
+        ),
+      );
+    }
+    if (isUploading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: ext.uploading),
+        ),
+      );
+    }
+    return IconButton(
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Icon(Icons.cloud_upload_outlined, size: 20, color: ext.txt2),
+      onPressed: onUpload,
     );
   }
 }
