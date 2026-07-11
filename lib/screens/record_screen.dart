@@ -453,9 +453,12 @@ class _RecordScreenState extends State<RecordScreen>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: ['Ride', 'Walk', 'Football'].map((type) {
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: ['Ride', 'Walk', 'Run', 'Football', 'Swim']
+                        .map((type) {
                       final isSelected = selected == type;
                       return GestureDetector(
                         onTap: () => setModalState(() => selected = type),

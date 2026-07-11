@@ -46,6 +46,25 @@ class AutoPauseConfig {
           resumeDebounceSeconds: 3,
           maxRecordAccuracyMeters: 20.0,
         );
+      case 'Run':
+        // Pause threshold sits below walking pace so walk breaks during a
+        // run still count as moving; only standing still triggers a pause
+        return const AutoPauseConfig(
+          enabled: true,
+          pauseSpeedKmh: 2.0,
+          resumeSpeedKmh: 4.0,
+          pauseDebounceSeconds: 5,
+          resumeDebounceSeconds: 3,
+          maxRecordAccuracyMeters: 20.0,
+        );
+      case 'Swim':
+        // GPS speed is unreliable in water (fixes only when the antenna
+        // surfaces) — no auto-pause; relaxed accuracy filter keeps the
+        // sparse open-water fixes that do arrive
+        return const AutoPauseConfig(
+          enabled: false,
+          maxRecordAccuracyMeters: 50.0,
+        );
       case 'Football':
       default:
         // Constant stopping/starting makes auto-pause meaningless for football;

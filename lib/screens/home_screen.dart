@@ -117,6 +117,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return Icons.directions_walk;
       case 'Football':
         return Icons.sports_soccer;
+      case 'Run':
+        return Icons.directions_run;
+      case 'Swim':
+        return Icons.pool;
       default:
         return Icons.fitness_center;
     }
