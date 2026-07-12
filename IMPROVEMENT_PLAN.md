@@ -75,7 +75,7 @@ The type is a plain string in the Flutter app and an enum in ActivitiesJournal �
 
 1. Deploy ActivitiesJournal (only when explicitly requested).
 2. Re-authorize via the app's Strava login so the token grant includes `activity:write` — the previously stored tokens only carry `activity:read_all`, and refreshing keeps old scopes.
-3. `TokenStore` reseeds from Key Vault config on app restart, so after re-authorizing, update `Strava:AccessToken` / `Strava:RefreshToken` in Key Vault with the new tokens — otherwise uploads break on the next restart.
+3. ~~Update Key Vault tokens after re-auth~~ No longer needed (verified 2026-07-12): `TokenStore.Set` persists tokens to blob (`tokens/token-<athleteId>.json`) and `TokenStoreInitializer` reloads them on startup *after* the Key Vault seed, so the fresh tokens win across restarts. Optional backup: copy the blob values into `Strava--AccessToken` / `Strava--RefreshToken` in Key Vault.
 4. Flip "Also upload to Strava" on in Track's Settings and upload a test activity; verify it appears on Strava and `stravaUploadStatus` is "uploaded".
 
 ---
