@@ -1,14 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/activity_record.dart';
 import '../services/gpx_parser_service.dart';
+import '../services/gpx_service.dart';
 import '../services/history_service.dart';
 import '../services/upload_service.dart';
 import '../theme.dart';
@@ -177,23 +179,44 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     }
   }
 
-  /// No share plugin is bundled (offline-first app), so "export" copies the raw
-  /// GPX to the clipboard — the offline-safe equivalent of the mock's button.
+  /// Exports the recorded GPX through the native iOS share sheet: the file is
+  /// copied to the temp dir under a friendly `<type>_<date>.gpx` name and handed
+  /// to [SharePlus] with the `application/gpx+xml` MIME type.
   Future<void> _exportGpx() async {
     try {
-      final file = File(widget.record.gpxFilePath);
-      if (!await file.exists()) {
+      final source = File(widget.record.gpxFilePath);
+      if (!await source.exists()) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('GPX file not found')),
         );
         return;
       }
-      final content = await file.readAsString();
-      await Clipboard.setData(ClipboardData(text: content));
+
+      final name = GpxService.exportFilename(
+        widget.record.activityType,
+        widget.record.startedAt,
+      );
+      final tempDir = await getTemporaryDirectory();
+      final exportFile = await source.copy('${tempDir.path}/$name');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('GPX copied to clipboard')),
+
+      // On iPad the share sheet is a popover anchored to the source widget.
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile(
+              exportFile.path,
+              mimeType: 'application/gpx+xml',
+              name: name,
+            ),
+          ],
+          subject: name,
+          sharePositionOrigin: box != null
+              ? box.localToGlobal(Offset.zero) & box.size
+              : null,
+        ),
       );
     } catch (_) {
       if (!mounted) return;

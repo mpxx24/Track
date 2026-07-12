@@ -68,7 +68,7 @@ The type is a plain string in the Flutter app and an enum in ActivitiesJournal �
 - [x] `TracksController.Upload`: `uploadToStrava` form field; `TrackSummary` gains `StravaActivityId` + `StravaUploadStatus` ("uploaded" / "duplicate" / "failed: …")
 - [x] Track app: "Also upload to Strava" switch in **Settings** (persisted; simpler than a per-upload toggle), flag sent with every upload, snackbar shows the Strava outcome
 - [x] Tests: `StravaUploadTests`, `TracksControllerUploadTests`, extended `SportTypesTests` (server); `upload_service_test.dart` (app)
-- [ ] Later (separate task): use `external_id` during Strava sync to link/dedup synced copies of Track uploads
+- [x] Use `external_id` during Strava sync to link synced copies of Track uploads (done 2026-07-12): `TrackLinkService` backfills `TrackSummary.StravaActivityId` when a synced activity's `external_id` matches `track-<id>` — non-destructive, idempotent, owner-athlete only, failures never break the sync. Link starts populating after the deploy + re-auth steps below; already-synced activities link on their next full re-fetch.
 - [ ] Later (before June 2027, per Strava's 2026 API terms): migrate to base URL `https://www.api-v3.strava.com` and move OAuth token-refresh credentials from form params to headers. Note: Standard-tier API access now requires a Strava subscription for the developer (3-month free code emailed to existing devs, mid-2026) — without it, both upload *and* the read sync stop working.
 
 ### Before first use (manual, one-time)
@@ -90,8 +90,8 @@ Prompt lives in [DESIGN_PROMPT.md](./DESIGN_PROMPT.md). Chosen system: **"Lume"*
 - [x] Rework screens: Record → Home → Activity detail → Planned routes (+ route preview) → Settings
 - [x] Keep the recording pipeline untouched — presentation-only (verified: kalman/auto-pause/upload tests untouched and green; 78 tests total)
 - [ ] Verify in bright-light conditions (the app is used outdoors on a bike)
-- [ ] Decide on Activity detail GPX export: currently copies GPX to clipboard (no share plugin bundled); switch to `share_plus` share sheet if preferred
-- [ ] Later: Settings toggle for light theme (tokens exist, app is pinned dark)
+- [x] Activity detail GPX export via `share_plus` share sheet (done 2026-07-12): GPX staged to temp as `<type>_<yyyy-MM-dd>.gpx`, shared as `application/gpx+xml` with iPad popover anchor; replaces the clipboard copy. Verify the sheet on device (next build triggers `pod install`)
+- [x] Settings toggle for light theme (done 2026-07-12): "Dark mode" switch in a new APPEARANCE section, persisted in SharedPreferences (`theme_mode`), applied reactively via `ThemeService` ValueNotifier; default stays dark
 
 ---
 

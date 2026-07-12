@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/theme_service.dart';
 import '../theme.dart';
 import '../widgets/settings_row.dart';
 
@@ -114,6 +115,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontSize: 12,
                 height: 1.4,
                 color: ext.txt3,
+              ),
+            ),
+          ),
+          const SizedBox(height: TrackSpacing.xl),
+          _SectionHeader('APPEARANCE'),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeService.mode,
+            builder: (context, mode, _) => SettingsRow(
+              title: 'Dark mode',
+              trailing: Switch(
+                value: mode == ThemeMode.dark,
+                onChanged: (value) => themeService.setDarkMode(value),
               ),
             ),
           ),

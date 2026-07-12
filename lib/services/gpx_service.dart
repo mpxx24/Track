@@ -4,6 +4,19 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 class GpxService {
+  /// A share-friendly filename for an exported GPX, e.g. `ride_2026-07-12.gpx`.
+  /// Type is lowercased with whitespace collapsed to underscores; empty types
+  /// fall back to a generic `activity` stem.
+  static String exportFilename(String activityType, DateTime date) {
+    final type = activityType
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '_');
+    final stem = type.isEmpty ? 'activity' : type;
+    final d = DateFormat('yyyy-MM-dd').format(date);
+    return '${stem}_$d.gpx';
+  }
+
   String generateGpx(
       List<Position> points, DateTime startTime, String activityType) {
     final formatter = DateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");

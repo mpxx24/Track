@@ -27,14 +27,19 @@ void main() {
     // Section headers present.
     expect(find.text('SERVER'), findsOneWidget);
     expect(find.text('GENERAL'), findsOneWidget);
+    expect(find.text('APPEARANCE'), findsOneWidget);
 
     // Persisted URL loaded into its field.
     expect(find.text('https://journal.local/api'), findsOneWidget);
 
     // Strava row rendered via the shared SettingsRow with a Switch that
     // reflects the persisted value.
-    expect(find.byType(SettingsRow), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    final stravaSwitch = find.descendant(
+      of: find.widgetWithText(SettingsRow, 'Also upload to Strava'),
+      matching: find.byType(Switch),
+    );
+    expect(stravaSwitch, findsOneWidget);
+    expect(tester.widget<Switch>(stravaSwitch).value, isTrue);
   });
 
   testWidgets('toggling the switch and saving persists all fields',
@@ -49,11 +54,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // Flip the Strava switch on.
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.descendant(
+      of: find.widgetWithText(SettingsRow, 'Also upload to Strava'),
+      matching: find.byType(Switch),
+    ));
     await tester.pumpAndSettle();
 
-    // Save.
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    // Save (scroll it into view first — the list can exceed the test viewport).
+    final saveButton = find.widgetWithText(FilledButton, 'Save');
+    await tester.ensureVisible(saveButton);
+    await tester.pumpAndSettle();
+    await tester.tap(saveButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Settings saved'), findsOneWidget);
