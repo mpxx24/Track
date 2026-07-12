@@ -16,6 +16,7 @@ import '../services/location_service.dart';
 import '../services/live_activity_service.dart';
 import '../services/route_planner_service.dart';
 import '../services/speed_calculator.dart';
+import '../services/watch_session_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../theme.dart';
 import '../widgets/activity_type_picker.dart';
@@ -26,7 +27,11 @@ import '../widgets/stat_tile.dart';
 class RecordScreen extends StatefulWidget {
   final PlannedRoute? plannedRoute;
 
-  const RecordScreen({super.key, this.plannedRoute});
+  /// When set (start-from-watch), recording begins immediately with this
+  /// type instead of showing the type picker.
+  final String? initialActivityType;
+
+  const RecordScreen({super.key, this.plannedRoute, this.initialActivityType});
 
   @override
   State<RecordScreen> createState() => _RecordScreenState();
@@ -42,7 +47,12 @@ class _RecordScreenState extends State<RecordScreen>
   final KalmanFilter _kalmanFilter = KalmanFilter();
 
   StreamSubscription<Position>? _positionSubscription;
+  StreamSubscription<WatchCommand>? _watchCommandSubscription;
   Timer? _elapsedTimer;
+
+  // Guards against a second save dialog when stop arrives from both the
+  // watch and the phone button.
+  bool _stopping = false;
 
   // Raw positions kept for GPX export; route points are Kalman-filtered
   final List<Position> _positions = [];
@@ -88,6 +98,8 @@ class _RecordScreenState extends State<RecordScreen>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
     WidgetsBinding.instance.addObserver(this);
+    _watchCommandSubscription =
+        watchSessionService.commands.listen(_onWatchCommand);
     _startRecording();
     if (widget.plannedRoute != null) {
       _loadGhostRoute(widget.plannedRoute!);
@@ -179,9 +191,11 @@ class _RecordScreenState extends State<RecordScreen>
       if (_mapReady) _mapController.move(latLng, 15);
     } catch (_) {}
 
-    // Ask activity type before recording begins
+    // Ask activity type before recording begins (skipped when the watch
+    // already chose one)
     if (!mounted) return;
-    final activityType = await _showActivityTypePicker(buttonLabel: 'Start');
+    final activityType = widget.initialActivityType ??
+        await _showActivityTypePicker(buttonLabel: 'Start');
     if (activityType == null) {
       // User dismissed — go back to home
       if (mounted) Navigator.pop(context);
@@ -202,12 +216,14 @@ class _RecordScreenState extends State<RecordScreen>
       });
       _timerTick++;
       if (_timerTick % 10 == 0) _updateLiveActivity();
+      _updateWatch();
     });
 
     _positionSubscription =
         _locationService.positionStream().listen(_onPosition);
 
     await _liveActivityService.start(activityType: activityType);
+    _updateWatch();
   }
 
   void _tickAutoPause() {
@@ -300,6 +316,31 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
+  void _updateWatch() {
+    watchSessionService.update(
+      activityType: _activityType ?? '',
+      distanceKm: _distanceKm,
+      elapsed: _formatDuration(_elapsed),
+      movingTime: _formatDuration(_movingDuration),
+      currentSpeedKmh: _currentSpeedKmh,
+      isPaused: _isPaused,
+    );
+  }
+
+  void _onWatchCommand(WatchCommand command) {
+    if (_startTime == null) return;
+    switch (command.kind) {
+      case WatchCommandKind.pause:
+        if (!_manuallyPaused) setState(() => _manuallyPaused = true);
+      case WatchCommandKind.resume:
+        if (_manuallyPaused) setState(() => _manuallyPaused = false);
+      case WatchCommandKind.stop:
+        _stopRecording();
+      case WatchCommandKind.start:
+        break; // handled in main.dart
+    }
+  }
+
   Future<bool?> _showAlwaysPermissionDialog() {
     final ext = Theme.of(context).extension<TrackTheme>()!;
     return showDialog<bool>(
@@ -343,9 +384,12 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Future<void> _stopRecording() async {
+    if (_stopping) return;
+    _stopping = true;
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
     await _liveActivityService.stop();
+    await watchSessionService.setIdle();
 
     if (!mounted) return;
 
@@ -356,6 +400,7 @@ class _RecordScreenState extends State<RecordScreen>
     }
     if (choice != 'save') {
       // Resume recording
+      _stopping = false;
       _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() {
           _elapsed = DateTime.now().difference(_startTime!);
@@ -366,11 +411,13 @@ class _RecordScreenState extends State<RecordScreen>
         });
         _timerTick++;
         if (_timerTick % 10 == 0) _updateLiveActivity();
+        _updateWatch();
       });
       _positionSubscription =
           _locationService.positionStream().listen(_onPosition);
       await _liveActivityService.start(activityType: _activityType!);
       _updateLiveActivity();
+      _updateWatch();
       return;
     }
 
@@ -545,6 +592,8 @@ class _RecordScreenState extends State<RecordScreen>
   void dispose() {
     WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
+    _watchCommandSubscription?.cancel();
+    watchSessionService.setIdle();
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
     _pulseController.dispose();

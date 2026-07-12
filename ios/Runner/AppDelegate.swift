@@ -5,6 +5,7 @@ import ActivityKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var currentActivity: Any? = nil
+  private var watchSessionService: WatchSessionService? = nil
 
   override func application(
     _ application: UIApplication,
@@ -16,6 +17,14 @@ import ActivityKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     setupMethodChannel(binaryMessenger: engineBridge.pluginRegistry.registrar(forPlugin: "LiveActivity")!.messenger())
+    setupWatchChannel(binaryMessenger: engineBridge.pluginRegistry.registrar(forPlugin: "WatchSession")!.messenger())
+  }
+
+  private func setupWatchChannel(binaryMessenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "com.mariusz.track/watch", binaryMessenger: binaryMessenger)
+    let service = WatchSessionService(channel: channel)
+    service.activate()
+    watchSessionService = service
   }
 
   private func setupMethodChannel(binaryMessenger: FlutterBinaryMessenger) {

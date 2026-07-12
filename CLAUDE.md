@@ -36,6 +36,9 @@ flutter build ios --simulator  # simulator only
 | `lib/services/auto_pause_config.dart` | Per-activity auto-pause thresholds (speed, debounce, GPS accuracy filter) |
 | `lib/services/live_activity_service.dart` | iOS Live Activity via `MethodChannel('com.mariusz.track/liveActivity')` |
 | `lib/services/notification_service.dart` | iOS persistent recording notification (distance, time, speed) |
+| `lib/services/watch_session_service.dart` | Apple Watch bridge via `MethodChannel('com.mariusz.track/watch')` — pushes per-second state, receives start/pause/resume/stop |
+| `ios/Runner/WatchSessionService.swift` | Phone-side `WCSession` relay for the watch channel |
+| `ios/TrackWatch/` | Native SwiftUI watchOS app (remote control + stats mirror). NOT embedded in Runner — see WATCH_PLAN.md before device builds |
 
 ## Recording pipeline
 
@@ -64,6 +67,8 @@ Local dev: `http://localhost:5010` | Production: `https://myactivitiesjournal.az
 
 `test/kalman_filter_test.dart` — Kalman filter smoothing logic
 `test/auto_pause_config_test.dart` — auto-pause threshold config
+`test/watch_session_service_test.dart` — watch bridge message encoding/dispatch
+`ios/TrackWatchTests/` — watch state parsing + haptic planner (XCTest): `cd ios && xcodebuild test -project Runner.xcodeproj -scheme TrackWatch -destination "id=<watch-sim-udid>"`
 
 ## Git remote
 

@@ -95,9 +95,13 @@ Prompt lives in [DESIGN_PROMPT.md](./DESIGN_PROMPT.md). Chosen system: **"Lume"*
 
 ---
 
-## Phase 4 — Apple Watch
+## Phase 4 — Apple Watch `[~]` (W1 done 2026-07-12, simulator-only)
 
 Full plan in [WATCH_PLAN.md](./WATCH_PLAN.md). Summary: Flutter has no watchOS support, so the watch app is native SwiftUI added as a target to `ios/Runner`, talking to Flutter over `WatchConnectivity`. Three sub-phases: remote control → standalone recording with heart rate → swim support (which finally makes pool swimming real).
+
+- [x] **W1 — remote control + live stats mirror** (code + simulator verification done 2026-07-12; 16 XCTests + 7 new Dart tests, 96 total green). Watch target is *not* embedded in Runner yet — deliberate, so the weekly free-signing iPhone sideload keeps working; embed + on-device test when the paid account lands. Details in WATCH_PLAN.md.
+- [ ] W2 — standalone recording (HKWorkoutSession, heart rate)
+- [ ] W3 — swimming (pool + open water)
 
 ---
 
